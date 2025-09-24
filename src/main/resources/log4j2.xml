@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+
+        <Null name="DoNothing"/>
+
+        <Routing name="FileRouter">
+            <Routes pattern="$${ctx:scanTarget}">
+                <!-- Route 1: Default. If scanTarget is null or empty, do nothing. -->
+                <Route ref="DoNothing" key="$${ctx:scanTarget}"/>
+
+                <!-- Route 2: Catch-all. This route is chosen for any non-empty scanTarget value. -->
+                <!-- The route itself doesn't have a key. It's the default for when the pattern resolves to something. -->
+                <Route>
+                    <File name="File-${ctx:scanTarget}" fileName="c:/users/basti/documents/logs/${ctx:scanTarget}-${date:yyyy-MM-dd}.log">
+                        <PatternLayout>
+                            <Pattern>%d %p %c{1.} [%t] %m%n</Pattern>
+                        </PatternLayout>
+                    </File>
+                </Route>
+            </Routes>
+        </Routing>
+    </Appenders>
+
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="FileRouter"/>
+        </Root>
+    </Loggers>
+</Configuration>

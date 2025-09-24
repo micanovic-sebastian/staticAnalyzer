@@ -1,0 +1,67 @@
+package org.example;
+
+import java.util.Set;
+
+public class DenyList {
+
+    public static final Set<String> FORBIDDEN_PACKAGES = Set.of(
+        "java.lang.reflect",        // For dynamic code execution and evasion.
+        "com.sun.jna",              // For calling native OS functions directly.
+        "java.lang.instrument",     // For modifying bytecode of running applications.
+        "com.sun.tools.attach"      // For attaching to and manipulating other JVMs.
+    );
+
+    public static final Set<String> FORBIDDEN_CLASSES = Set.of(
+        // Process Execution & System Manipulation
+        "java.lang.Runtime",
+        "java.lang.ProcessBuilder",
+        "sun.misc.Unsafe",          // For direct memory manipulation.
+
+        // Desktop Espionage
+        "java.awt.Robot",           // For screen capture and simulating user input.
+
+        // Dynamic Code Loading
+        "java.net.URLClassLoader"   // For loading code from remote URLs.
+    );
+
+    public static final Set<String> FORBIDDEN_METHODS = Set.of(
+        "java.lang.Runtime.exec",
+        "java.lang.System.exit",
+
+        // Native Code Loading
+        "java.lang.System.load",
+        "java.lang.System.loadLibrary"
+    );
+
+    public static final Set<String> SUSPICIOUS_CLASSES = Set.of(
+        // Cryptomining Indicators
+        "java.math.BigInteger",
+        "java.security.MessageDigest",
+        "java.util.concurrent.ExecutorService",
+        "java.util.concurrent.ThreadPoolExecutor",
+
+        // Dangerous Deserialization
+        "java.io.ObjectInputStream", // Can lead to RCE if stream is untrusted.
+
+        // General File Access (to be checked by the path analyzer)
+        "java.io.File"
+    );
+
+    public static final Set<String> SUSPICIOUS_FILE_PATHS = Set.of(
+        // Windows file paths
+        "c:/windows",
+        "c:\\windows",
+        "system32",
+        "program files",
+        "appdata",
+        // Linux file paths
+        "/etc/",
+        "/bin/",
+        "/sbin/",
+        "/usr/bin/",
+        "/usr/sbin/",
+        "/var/log/",
+        // User home directory - often a target for ransomware or info stealers
+        "user.home" // We will check for System.getProperty("user.home")
+    );
+}
