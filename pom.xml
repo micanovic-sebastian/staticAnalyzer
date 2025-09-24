@@ -52,7 +52,7 @@
 
                 <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
 
-                <mainClass>org.example.StaticAnalyzer</mainClass>
+                <mainClass>org.example.analyzer.StaticAnalyzer</mainClass>
             </manifest>
         </archive>
         <descriptorRefs>

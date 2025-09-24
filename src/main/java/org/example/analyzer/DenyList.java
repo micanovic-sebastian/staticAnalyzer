@@ -1,4 +1,4 @@
-package org.example;
+package org.example.analyzer;
 
 import java.util.Set;
 
@@ -63,5 +63,28 @@ public class DenyList {
         "/var/log/",
         // User home directory - often a target for ransomware or info stealers
         "user.home" // We will check for System.getProperty("user.home")
+    );
+
+        /**
+     * Methods that introduce untrusted, external data into the program.
+     * The return values of these methods are considered "tainted".
+     */
+    public static final Set<String> TAINT_SOURCES = Set.of(
+        "java.net.Socket.getInputStream",
+        "java.nio.channels.SocketChannel.read",
+        "java.io.FileInputStream.read"
+        // In a real-world tool, you would add many more sources,
+        // such as methods that read HTTP request parameters.
+    );
+
+    /**
+     * Methods that are dangerous if called with tainted data.
+     * These are the "sinks" we want to protect.
+     */
+    public static final Set<String> SENSITIVE_SINKS = Set.of(
+        "java.lang.Runtime.exec",
+        "java.lang.ProcessBuilder.start",
+        "java.io.File.new", // Using tainted data for a file path is dangerous
+        "java.nio.file.Paths.get"
     );
 }

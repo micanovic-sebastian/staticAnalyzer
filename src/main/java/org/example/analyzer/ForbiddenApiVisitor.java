@@ -1,4 +1,4 @@
-package org.example;
+package org.example.analyzer;
 
 import com.sun.source.tree.*;
 import com.sun.source.util.SourcePositions;
