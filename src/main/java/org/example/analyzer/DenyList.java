@@ -1,6 +1,7 @@
 package org.example.analyzer;
 
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class DenyList {
 
@@ -86,5 +87,25 @@ public class DenyList {
         "java.lang.ProcessBuilder.start",
         "java.io.File.new", // Using tainted data for a file path is dangerous
         "java.nio.file.Paths.get"
+    );
+
+    public static final Set<String> OBFUSCATION_METHODS = Set.of(
+        "java.util.Base64.getDecoder" // The starting point for Base64 decoding.
+    );
+
+        /**
+     * Regex patterns for detecting suspicious string literals.
+     */
+    public static final Pattern IP_ADDRESS_PATTERN =
+        Pattern.compile("\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b");
+
+    /**
+     * Integer literals that are suspicious, often used for C2 connections.
+     */
+    public static final Set<Integer> SUSPICIOUS_PORTS = Set.of(
+        1337, // Common "leet" port
+        4444, // Default Metasploit port
+        6667, // Common IRC port used for botnets
+        31337 // Back Orifice port
     );
 }
