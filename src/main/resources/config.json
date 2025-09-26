@@ -1,0 +1,31 @@
+{
+  "forbiddenPackages": [
+    { "pattern": "java.lang.reflect", "severity": "HIGH", "message": "Forbidden package import: reflection is often used for evasion." },
+    { "pattern": "com.sun.jna", "severity": "CRITICAL", "message": "Forbidden package import: JNA allows direct calls to native OS functions." },
+    { "pattern": "java.lang.instrument", "severity": "CRITICAL", "message": "Forbidden package import: instrumentation can modify running code." }
+  ],
+  "forbiddenClasses": [
+    { "pattern": "java.lang.Runtime", "severity": "HIGH", "message": "Forbidden class import: Runtime can execute system commands." },
+    { "pattern": "java.lang.ProcessBuilder", "severity": "HIGH", "message": "Forbidden class import: ProcessBuilder can execute system commands." },
+    { "pattern": "sun.misc.Unsafe", "severity": "CRITICAL", "message": "Forbidden class import: Unsafe provides direct memory access." },
+    { "pattern": "java.awt.Robot", "severity": "MEDIUM", "message": "Forbidden class import: Robot can be used for UI automation and espionage." }
+  ],
+  "forbiddenMethods": [
+    { "pattern": "java.lang.Runtime.exec", "severity": "CRITICAL", "message": "Forbidden method call: direct command execution." },
+    { "pattern": "java.lang.System.load", "severity": "CRITICAL", "message": "Forbidden method call: loading of native libraries." }
+  ],
+   "suspiciousClasses": [
+    { "pattern": "java.io.ObjectInputStream", "severity": "HIGH", "message": "Suspicious class import: Deserialization can lead to RCE." },
+    { "pattern": "java.security.MessageDigest", "severity": "MEDIUM", "message": "Suspicious class import: often used in cryptomining." },
+    { "pattern": "java.net.Socket", "severity": "HIGH", "message": "Suspicious class import: raw network sockets are used for custom C2 communication." },
+    { "pattern": "javax.crypto.Cipher", "severity": "HIGH", "message": "Suspicious class import: strong cryptography is a core component of ransomware." }
+  ],
+  "suspiciousFilePaths": [
+    { "pattern": "/etc/", "severity": "HIGH", "message": "Suspicious file path access." },
+    { "pattern": "c:/windows", "severity": "HIGH", "message": "Suspicious file path access." },
+    { "pattern": "user.home", "severity": "MEDIUM", "message": "Suspicious file path access to user home directory." }
+  ],
+  "obfuscationMethods": [
+    { "pattern": "java.util.Base64.getDecoder", "severity": "HIGH", "message": "Suspicious method call for de-obfuscation (Base64)." }
+  ]
+}

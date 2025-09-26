@@ -5,46 +5,32 @@ import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.NewClassTree;
 import com.sun.source.tree.Tree;
+import org.example.config.Rule;
+import org.example.config.ScanConfiguration;
+
 import java.util.List;
 import java.util.Optional;
 
 public class FileOperationAnalyzer {
 
-    /**
-     * Analyzes a file operation node (like "new File(path)") to see if the path is suspicious.
-     * @param node The AST node representing the file operation.
-     * @return An Optional containing a violation message if the path is suspicious.
-     */
-    public Optional<String> analyze(Tree node) {
-        Optional<String> pathArgument = extractStringArgument(node);
+    private final ScanConfiguration config;
 
-        if (pathArgument.isPresent()) {
-            String path = pathArgument.get();
-            if (isPathSuspicious(path)) {
-                return Optional.of("Suspicious file path access: " + path);
-            }
-        }
-        // Note: If the path isn't a simple string (e.g., a variable), this check is skipped.
-        // A more advanced analyzer would need to trace the variable's origin.
-        return Optional.empty();
+    public FileOperationAnalyzer(ScanConfiguration config) {
+        this.config = config;
     }
 
-    /**
-     * Checks if a given file path matches any of our suspicious patterns.
-     */
-    private boolean isPathSuspicious(String path) {
+    public Optional<Rule> findSuspiciousPathRule(Tree node) {
+        return extractStringArgument(node)
+                .flatMap(this::findMatchingRule);
+    }
+
+    private Optional<Rule> findMatchingRule(String path) {
         String normalizedPath = path.toLowerCase().replace('\\', '/');
-        for (String suspiciousPattern : DenyList.SUSPICIOUS_FILE_PATHS) {
-            if (normalizedPath.contains(suspiciousPattern)) {
-                return true;
-            }
-        }
-        return false;
+        return config.suspiciousFilePaths.stream()
+                .filter(rule -> normalizedPath.contains(rule.pattern))
+                .findFirst();
     }
 
-    /**
-     * Extracts the first string literal argument from a method call or constructor.
-     */
     private Optional<String> extractStringArgument(Tree node) {
         List<? extends ExpressionTree> arguments = null;
 
