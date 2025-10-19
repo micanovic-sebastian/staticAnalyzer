@@ -9,17 +9,15 @@
 
         <Routing name="FileRouter">
             <Routes pattern="$${ctx:scanTarget}">
-                <!-- Route 1: Default. If scanTarget is null or empty, do nothing. -->
-                <Route ref="DoNothing" key="$${ctx:scanTarget}"/>
 
-                <!-- Route 2: Catch-all. This route is chosen for any non-empty scanTarget value. -->
-                <!-- The route itself doesn't have a key. It's the default for when the pattern resolves to something. -->
+                <Route ref="DoNothing" key="NONE"/>
+
                 <Route>
-                    <File name="File-${ctx:scanTarget}" fileName="c:/users/basti/documents/logs/${ctx:scanTarget}-${date:yyyy-MM-dd}.log">
+                    <FileAppender name="File-${ctx:scanTarget}" fileName="c:/users/basti/documents/logs/${ctx:scanTarget}-${date:yyyy-MM-dd}.log">
                         <PatternLayout>
                             <Pattern>%d %p %c{1.} [%t] %m%n</Pattern>
                         </PatternLayout>
-                    </File>
+                    </FileAppender>
                 </Route>
             </Routes>
         </Routing>
