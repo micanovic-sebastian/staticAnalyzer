@@ -18,8 +18,10 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.DecimalFormat; // <-- ADDED
 import java.util.Collections;
 import java.util.List;
+import java.util.Map; // <-- ADDED
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 // Import for Zipping
@@ -29,6 +31,12 @@ import java.util.zip.ZipOutputStream;
 public class StaticAnalyzer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StaticAnalyzer.class);
+
+    // --- NEW: Globals for complexity average ---
+    private static int totalMethodCount = 0;
+    private static int totalComplexitySum = 0;
+    private static final DecimalFormat df = new DecimalFormat("0.00");
+    // --- END NEW ---
 
     public static void main(String[] args) throws IOException {
         if (args.length == 0) {
@@ -125,11 +133,27 @@ public class StaticAnalyzer {
         // --- End of VirusTotal Pre-Check ---
 
         LOGGER.info("Proceeding with static source code analysis.");
+        // --- NEW: Reset counters before scan ---
+        totalMethodCount = 0;
+        totalComplexitySum = 0;
+        // --- END NEW ---
+
         for (File file : filesToAnalyze) {
             analyzeFile(file);
         }
 
-        LOGGER.info("Full analysis complete.");
+        // --- NEW: Report final average complexity ---
+        if (totalMethodCount > 0) {
+            double averageComplexity = (double) totalComplexitySum / totalMethodCount;
+            LOGGER.info("----------------------------------------");
+            LOGGER.info("Full analysis complete.");
+            LOGGER.info("Total Methods Analyzed: {}", totalMethodCount);
+            LOGGER.info("Total Cyclomatic Complexity: {}", totalComplexitySum);
+            LOGGER.info("Average Cyclomatic Complexity: {}", df.format(averageComplexity));
+        } else {
+            LOGGER.info("Full analysis complete. No methods were found to analyze.");
+        }
+        // --- END NEW ---
     }
 
     private static void analyzeFile(File sourceFile) {
@@ -164,6 +188,19 @@ public class StaticAnalyzer {
                         LOGGER.warn(violation.toString());
                     }
                 }
+
+                // --- NEW: Process and log Cyclomatic Complexity ---
+                Map<String, Integer> complexities = visitor.getMethodComplexities();
+                if (!complexities.isEmpty()) {
+                    LOGGER.info("--- Cyclomatic Complexity ---");
+                    for (Map.Entry<String, Integer> entry : complexities.entrySet()) {
+                        LOGGER.info("  - Method: {} | Complexity: {}", entry.getKey(), entry.getValue());
+                        totalComplexitySum += entry.getValue();
+                        totalMethodCount++;
+                    }
+                    LOGGER.info("-------------------------------");
+                }
+                // --- END NEW ---
             }
         } catch (Exception e) {
             LOGGER.error("Could not analyze file: {}", sourceFile.getAbsolutePath(), e);

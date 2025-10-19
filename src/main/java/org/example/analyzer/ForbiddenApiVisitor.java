@@ -9,7 +9,9 @@ import org.example.config.ScanConfiguration;
 import org.example.config.Violation;
 
 import java.util.ArrayList;
+import java.util.HashMap; // <-- ADDED
 import java.util.List;
+import java.util.Map; // <-- ADDED
 
 public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
@@ -20,22 +22,48 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
     private final ScanConfiguration config = ConfigurationLoader.getConfiguration();
     private final TaintAnalyzer taintAnalyzer = new TaintAnalyzer();
 
+    // --- NEW: Fields for Cyclomatic Complexity ---
+    private final Map<String, Integer> methodComplexities;
+    private String currentClassName;
+    private String currentMethodName;
+    // --- END NEW ---
+
     public ForbiddenApiVisitor(CompilationUnitTree compilationUnit, SourcePositions sourcePositions) {
         this.compilationUnit = compilationUnit;
         this.sourcePositions = sourcePositions;
         this.violations = new ArrayList<>();
         this.fileAnalyzer = new FileOperationAnalyzer(config);
+        // --- NEW: Initialize complexity fields ---
+        this.methodComplexities = new HashMap<>();
+        this.currentClassName = null;
+        this.currentMethodName = null;
+        // --- END NEW ---
     }
 
     public List<Violation> getViolations() {
         return violations;
     }
 
+    // --- NEW: Getter for complexity results ---
+    public Map<String, Integer> getMethodComplexities() {
+        return methodComplexities;
+    }
+    // --- END NEW ---
+
     private void addViolation(String message, String severity, Tree node) {
         long startPosition = sourcePositions.getStartPosition(compilationUnit, node);
         long lineNumber = compilationUnit.getLineMap().getLineNumber(startPosition);
         violations.add(new Violation(message, lineNumber, severity));
     }
+
+    // --- NEW: Helper to increment complexity for the current method ---
+    private void incrementComplexity() {
+        if (currentMethodName != null && currentClassName != null) {
+            String key = currentClassName + "." + currentMethodName;
+            methodComplexities.put(key, methodComplexities.get(key) + 1);
+        }
+    }
+    // --- END NEW ---
 
     private static class LoopBodyScanner extends TreeScanner<Void, Void> {
         boolean foundMessageDigest = false;
@@ -65,17 +93,92 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
         }
     }
 
+    // --- NEW: Track class name ---
+    @Override
+    public Void visitClass(ClassTree node, Void p) {
+        // Store class name to create unique method keys (e.g., "MyClass.myMethod")
+        this.currentClassName = node.getSimpleName().toString();
+        return super.visitClass(node, p);
+    }
+    // --- END NEW ---
+
+    // --- NEW: Track method entry/exit and set base complexity ---
+    @Override
+    public Void visitMethod(MethodTree node, Void p) {
+        this.currentMethodName = node.getName().toString();
+        // Constructors have a special name "<init>", this is fine
+        if (this.currentClassName != null) {
+            String key = this.currentClassName + "." + this.currentMethodName;
+            this.methodComplexities.put(key, 1); // Start with base complexity of 1
+        }
+
+        // Scan the method body
+        Void result = super.visitMethod(node, p);
+
+        this.currentMethodName = null; // Exit the method scope
+        return result;
+    }
+    // --- END NEW ---
+
+    // --- NEW: Overrides for all decision points ---
+
+    @Override
+    public Void visitIf(IfTree node, Void p) {
+        incrementComplexity(); // +1 for "if"
+        return super.visitIf(node, p);
+    }
+
     @Override
     public Void visitWhileLoop(WhileLoopTree node, Void p) {
-        checkForLoopPatterns(node.getStatement(), node);
+        incrementComplexity(); // +1 for "while"
+        checkForLoopPatterns(node.getStatement(), node); // Keep existing logic
         return super.visitWhileLoop(node, p);
     }
 
     @Override
     public Void visitForLoop(ForLoopTree node, Void p) {
-        checkForLoopPatterns(node.getStatement(), node);
+        incrementComplexity(); // +1 for "for"
+        checkForLoopPatterns(node.getStatement(), node); // Keep existing logic
         return super.visitForLoop(node, p);
     }
+
+    @Override
+    public Void visitDoWhileLoop(DoWhileLoopTree node, Void p) {
+        incrementComplexity(); // +1 for "do-while"
+        return super.visitDoWhileLoop(node, p);
+    }
+
+    @Override
+    public Void visitCase(CaseTree node, Void p) {
+        // "default" case doesn't add complexity
+        if (node.getExpression() != null) {
+            incrementComplexity(); // +1 for "case"
+        }
+        return super.visitCase(node, p);
+    }
+
+    @Override
+    public Void visitCatch(CatchTree node, Void p) {
+        incrementComplexity(); // +1 for "catch"
+        return super.visitCatch(node, p);
+    }
+
+    @Override
+    public Void visitConditionalExpression(ConditionalExpressionTree node, Void p) {
+        incrementComplexity(); // +1 for ternary operator (?:)
+        return super.visitConditionalExpression(node, p);
+    }
+
+    @Override
+    public Void visitBinary(BinaryTree node, Void p) {
+        // +1 for each "&&" or "||"
+        if (node.getKind() == Tree.Kind.AND || node.getKind() == Tree.Kind.OR) {
+            incrementComplexity();
+        }
+        return super.visitBinary(node, p);
+    }
+    // --- END NEW ---
+
 
     @Override
     public Void visitImport(ImportTree node, Void p) {
