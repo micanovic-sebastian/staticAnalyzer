@@ -18,6 +18,7 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
     private final SourcePositions sourcePositions;
     private final FileOperationAnalyzer fileAnalyzer;
     private final ScanConfiguration config = ConfigurationLoader.getConfiguration();
+    private final TaintAnalyzer taintAnalyzer = new TaintAnalyzer();
 
     public ForbiddenApiVisitor(CompilationUnitTree compilationUnit, SourcePositions sourcePositions) {
         this.compilationUnit = compilationUnit;
@@ -123,10 +124,32 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
             .findFirst()
             .ifPresent(rule -> addViolation(rule.message + " (" + methodSelect + ")", rule.severity, node));
 
+        taintAnalyzer.analyzeSink(node).ifPresent(violationMessage -> {
+            addViolation(violationMessage, "CRITICAL", node);
+        });
+
         if (methodSelect.startsWith("Files.write") || methodSelect.startsWith("Files.read")) {
             fileAnalyzer.findSuspiciousPathRule(node)
                     .ifPresent(rule -> addViolation(rule.message, rule.severity, node));
         }
         return super.visitMethodInvocation(node, p);
+    }
+
+    @Override
+    public Void visitVariable(VariableTree node, Void p) {
+        // Check if the variable is being initialized
+        if (node.getInitializer() != null) {
+            ExpressionTree initializer = node.getInitializer();
+
+            // Case 1: Taint Source (e.g., String s = socket.getInputStream().read())
+            if (initializer instanceof MethodInvocationTree) {
+                taintAnalyzer.trackSource(node, (MethodInvocationTree) initializer);
+            }
+            // Case 2: Taint Propagation (e.g., String cmd = s)
+            else {
+                taintAnalyzer.propagateTaint(node, initializer);
+            }
+        }
+        return super.visitVariable(node, p);
     }
 }

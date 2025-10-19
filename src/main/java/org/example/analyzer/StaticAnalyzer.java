@@ -14,6 +14,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,6 +22,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+// Import for Zipping
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 public class StaticAnalyzer {
 
@@ -51,9 +55,76 @@ public class StaticAnalyzer {
             }
             LOGGER.info("Found {} java files to analyze.", filesToAnalyze.size());
         } else {
+            // If it's a single file, just analyze that one
             filesToAnalyze = Collections.singletonList(inputFile);
+            LOGGER.info("Found 1 java file to analyze.");
         }
 
+        if (filesToAnalyze.isEmpty()) {
+            LOGGER.info("No .java files found. Exiting.");
+            return;
+        }
+
+        // --- NEW: VirusTotal Pre-Check (Zipped) ---
+        LOGGER.info("Starting VirusTotal pre-check...");
+        VirusTotalAnalyzer vtAnalyzer = new VirusTotalAnalyzer();
+
+        if (!vtAnalyzer.isConfigured()) {
+            LOGGER.warn("VT_API_KEY not set. Skipping VirusTotal pre-check.");
+        } else {
+            Path tempZipFile = null;
+            try {
+                // 1. Create a temporary zip file
+                tempZipFile = Files.createTempFile("analysis_bundle_", ".zip");
+                LOGGER.info("Creating zip bundle for {} files...", filesToAnalyze.size());
+
+                // Determine base path for relative file names in zip
+                Path inputBasePath = inputFile.isDirectory() ? inputFile.toPath() : inputFile.getParentFile().toPath();
+
+                // 2. Add all files to the zip
+                try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(tempZipFile))) {
+                    for (File file : filesToAnalyze) {
+                        // Create relative paths for files in zip
+                        String relativePath = inputBasePath.relativize(file.toPath()).toString().replace('\\', '/');
+                        ZipEntry zipEntry = new ZipEntry(relativePath);
+                        zos.putNextEntry(zipEntry);
+
+                        try (FileInputStream fis = new FileInputStream(file)) {
+                            fis.transferTo(zos);
+                        }
+                        zos.closeEntry();
+                    }
+                }
+                LOGGER.info("Zip bundle created: {}", tempZipFile.toAbsolutePath());
+
+                // 3. Upload and check the single zip file
+                String analysisId = vtAnalyzer.uploadFile(tempZipFile.toAbsolutePath().toString());
+                boolean isMalicious = vtAnalyzer.getAnalysisReport(analysisId);
+
+                if (isMalicious) {
+                    LOGGER.error("[ANALYSIS ABORTED] Zip bundle was flagged as malicious by VirusTotal.");
+                    return; // Abort the entire operation
+                }
+                LOGGER.info("VirusTotal pre-check complete. Bundle appears clean.");
+
+            } catch (Exception e) {
+                LOGGER.error("Error during VirusTotal analysis. Aborting static analysis.", e);
+                return;
+            } finally {
+                // 4. Clean up the temporary zip file
+                if (tempZipFile != null) {
+                    try {
+                        Files.delete(tempZipFile);
+                        LOGGER.info("Deleted temporary zip bundle.");
+                    } catch (IOException e) {
+                        LOGGER.warn("Could not delete temporary zip file: {}", tempZipFile.toAbsolutePath());
+                    }
+                }
+            }
+        }
+        // --- End of VirusTotal Pre-Check ---
+
+        LOGGER.info("Proceeding with static source code analysis.");
         for (File file : filesToAnalyze) {
             analyzeFile(file);
         }
@@ -72,7 +143,10 @@ public class StaticAnalyzer {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
             Iterable<? extends JavaFileObject> compilationUnits = fileManager.getJavaFileObjects(sourceFile);
-            JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, null, null, null, compilationUnits);
+
+            // Add compiler options to disable annotation processing
+            List<String> options = List.of("-proc:none");
+            JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, null, options, null, compilationUnits);
 
             JavacTask javacTask = (JavacTask) task;
             SourcePositions sourcePositions = Trees.instance(javacTask).getSourcePositions();
