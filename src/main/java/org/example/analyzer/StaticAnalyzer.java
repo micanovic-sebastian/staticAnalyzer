@@ -39,38 +39,26 @@ public class StaticAnalyzer {
 
     public static void main(String[] args) throws IOException {
         if (args.length == 0) {
-            LOGGER.error("Usage: java StaticAnalyzer <path> [vt-mode] [log=files|none]");
+            // MODIFIED: Removed log parameter from usage
+            LOGGER.error("Usage: java StaticAnalyzer <path> [vt-mode]");
             return;
         }
 
-        // --- Parse arguments for vt-mode and log-mode ---
+        // --- MODIFIED: Removed log-mode parsing ---
         List<String> argList = new ArrayList<>(Arrays.asList(args));
 
         // Check for and remove the vt-mode flag
         boolean isVtModeEnabled = argList.remove("vt-mode");
 
-        // Check for and remove the log-mode flag
-        String logMode = "files"; // Default to file logging
-        for (int i = argList.size() - 1; i >= 0; i--) {
-            String arg = argList.get(i);
-            if (arg.startsWith("log=")) {
-                String[] parts = arg.split("=");
-                if (parts.length == 2) {
-                    logMode = parts[1].toLowerCase();
-                }
-                argList.remove(i);
-                break; // Assume only one log parameter
-            }
-        }
-
         if (argList.isEmpty()) {
-            LOGGER.error("No path specified. Usage: java StaticAnalyzer <path> [vt-mode] [log=files|none]");
+            // MODIFIED: Removed log parameter from usage
+            LOGGER.error("No path specified. Usage: java StaticAnalyzer <path> [vt-mode]");
             return;
         }
 
         // Assume the first remaining argument is the path
         String inputPath = argList.get(0);
-        // --- END ---
+        // --- END MODIFIED ---
 
         File inputFile = new File(inputPath);
         if (!inputFile.exists()) {
@@ -100,7 +88,6 @@ public class StaticAnalyzer {
             return;
         }
 
-        // --- MODIFIED: VirusTotal Pre-Check is conditional ---
         if (isVtModeEnabled) {
             LOGGER.info("Starting VirusTotal pre-check (vt-mode enabled)...");
             VirusTotalAnalyzer vtAnalyzer = new VirusTotalAnalyzer();
@@ -169,9 +156,9 @@ public class StaticAnalyzer {
         totalComplexitySum = 0;
         // --- END ---
 
-        // --- MODIFIED: Pass logMode to analyzeFile ---
+        // --- MODIFIED: Removed logMode parameter from call ---
         for (File file : filesToAnalyze) {
-            analyzeFile(file, logMode);
+            analyzeFile(file);
         }
         // --- END MODIFIED ---
 
@@ -190,17 +177,12 @@ public class StaticAnalyzer {
         // --- END ---
     }
 
-    // --- MODIFIED: Added logMode parameter ---
-    private static void analyzeFile(File sourceFile, String logMode) {
+    // --- MODIFIED: Removed logMode parameter from signature ---
+    private static void analyzeFile(File sourceFile) {
         // --- MODIFIED: Always set ThreadContext ---
-        if ("files".equalsIgnoreCase(logMode)) {
-            String baseName = sourceFile.toPath().getFileName().toString();
-            String scanTargetName = baseName.replaceFirst("[.][^.]+$", "");
-            ThreadContext.put("scanTarget", scanTargetName);
-        } else {
-            // Explicitly set to "NONE" to match the log4j2.xml key
-            ThreadContext.put("scanTarget", "NONE");
-        }
+        String baseName = sourceFile.toPath().getFileName().toString();
+        String scanTargetName = baseName.replaceFirst("[.][^.]+$", "");
+        ThreadContext.put("scanTarget", scanTargetName);
         // --- END MODIFIED ---
 
         LOGGER.info("Analyzing: {}", sourceFile.getAbsolutePath());

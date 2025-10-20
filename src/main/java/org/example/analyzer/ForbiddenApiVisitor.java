@@ -9,12 +9,13 @@ import org.example.config.ScanConfiguration;
 import org.example.config.Violation;
 
 import java.util.ArrayList;
-import java.util.HashMap; // <-- ADDED
+import java.util.HashMap;
 import java.util.List;
-import java.util.Map; // <-- ADDED
+import java.util.Map;
 
 public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
+    // Fields for violation contraints
     private final List<Violation> violations;
     private final CompilationUnitTree compilationUnit;
     private final SourcePositions sourcePositions;
@@ -22,33 +23,32 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
     private final ScanConfiguration config = ConfigurationLoader.getConfiguration();
     private final TaintAnalyzer taintAnalyzer = new TaintAnalyzer();
 
-    // --- NEW: Fields for Cyclomatic Complexity ---
+    //  Fields for Cyclomatic Complexity ---
     private final Map<String, Integer> methodComplexities;
     private String currentClassName;
     private String currentMethodName;
-    // --- END NEW ---
+
+    //Field for method-level timing checks ---
+    private int methodTimingCallCount = 0;
+
 
     public ForbiddenApiVisitor(CompilationUnitTree compilationUnit, SourcePositions sourcePositions) {
         this.compilationUnit = compilationUnit;
         this.sourcePositions = sourcePositions;
         this.violations = new ArrayList<>();
         this.fileAnalyzer = new FileOperationAnalyzer(config);
-        // --- NEW: Initialize complexity fields ---
         this.methodComplexities = new HashMap<>();
         this.currentClassName = null;
         this.currentMethodName = null;
-        // --- END NEW ---
     }
 
     public List<Violation> getViolations() {
         return violations;
     }
 
-    // --- NEW: Getter for complexity results ---
     public Map<String, Integer> getMethodComplexities() {
         return methodComplexities;
     }
-    // --- END NEW ---
 
     private void addViolation(String message, String severity, Tree node) {
         long startPosition = sourcePositions.getStartPosition(compilationUnit, node);
@@ -56,19 +56,18 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
         violations.add(new Violation(message, lineNumber, severity));
     }
 
-    // --- NEW: Helper to increment complexity for the current method ---
     private void incrementComplexity() {
         if (currentMethodName != null && currentClassName != null) {
             String key = currentClassName + "." + currentMethodName;
             methodComplexities.put(key, methodComplexities.get(key) + 1);
         }
     }
-    // --- END NEW ---
 
     private static class LoopBodyScanner extends TreeScanner<Void, Void> {
         boolean foundMessageDigest = false;
         boolean foundBigInteger = false;
-        boolean foundXorOperation = false; // Flag for obfuscation
+        boolean foundXorOperation = false;
+        boolean foundTimingCall = false;
 
         @Override
         public Void visitBinary(BinaryTree node, Void p) {
@@ -77,7 +76,15 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
             }
             return super.visitBinary(node, p);
         }
-        // ... other visit methods from previous implementation ...
+
+        @Override
+        public Void visitMethodInvocation(MethodInvocationTree node, Void p) {
+            String methodSelect = node.getMethodSelect().toString();
+            if (methodSelect.equals("System.nanoTime") || methodSelect.equals("System.currentTimeMillis")) {
+                foundTimingCall = true;
+            }
+            return super.visitMethodInvocation(node, p);
+        }
     }
 
     // Helper to check for patterns in any kind of loop
@@ -91,54 +98,58 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
         if (loopScanner.foundXorOperation) {
             addViolation("Potential string obfuscation: Loop contains XOR operations, often used for simple decryption.", "HIGH", loopNode);
         }
+        if (loopScanner.foundTimingCall) {
+            addViolation("Suspicious anti-sandbox/debugging pattern: Timing call (System.nanoTime/currentTimeMillis) found inside a loop.", "HIGH", loopNode);
+        }
     }
 
-    // --- NEW: Track class name ---
     @Override
     public Void visitClass(ClassTree node, Void p) {
-        // Store class name to create unique method keys (e.g., "MyClass.myMethod")
         this.currentClassName = node.getSimpleName().toString();
         return super.visitClass(node, p);
     }
-    // --- END NEW ---
 
-    // --- NEW: Track method entry/exit and set base complexity ---
     @Override
     public Void visitMethod(MethodTree node, Void p) {
         this.currentMethodName = node.getName().toString();
-        // Constructors have a special name "<init>", this is fine
+        this.methodTimingCallCount = 0; // Reset for this method
+
+        // Start with base complexity of 1
         if (this.currentClassName != null) {
             String key = this.currentClassName + "." + this.currentMethodName;
-            this.methodComplexities.put(key, 1); // Start with base complexity of 1
+            this.methodComplexities.put(key, 1);
         }
 
         // Scan the method body
         Void result = super.visitMethod(node, p);
 
+
+        // This flags methods that have 2 or more calls to nanoTime/currentTimeMillis
+        if (this.methodTimingCallCount >= 2) {
+             addViolation("Suspicious anti-sandbox/debugging pattern: Method contains " + this.methodTimingCallCount + " calls to System.nanoTime/currentTimeMillis, suggesting a timing check.", "HIGH", node);
+        }
+
         this.currentMethodName = null; // Exit the method scope
+        this.methodTimingCallCount = 0; // Clear count
         return result;
     }
-    // --- END NEW ---
-
-    // --- NEW: Overrides for all decision points ---
 
     @Override
     public Void visitIf(IfTree node, Void p) {
         incrementComplexity(); // +1 for "if"
         return super.visitIf(node, p);
     }
-
     @Override
     public Void visitWhileLoop(WhileLoopTree node, Void p) {
         incrementComplexity(); // +1 for "while"
-        checkForLoopPatterns(node.getStatement(), node); // Keep existing logic
+        checkForLoopPatterns(node.getStatement(), node);
         return super.visitWhileLoop(node, p);
     }
 
     @Override
     public Void visitForLoop(ForLoopTree node, Void p) {
         incrementComplexity(); // +1 for "for"
-        checkForLoopPatterns(node.getStatement(), node); // Keep existing logic
+        checkForLoopPatterns(node.getStatement(), node);
         return super.visitForLoop(node, p);
     }
 
@@ -150,7 +161,6 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitCase(CaseTree node, Void p) {
-        // "default" case doesn't add complexity
         if (node.getExpression() != null) {
             incrementComplexity(); // +1 for "case"
         }
@@ -171,13 +181,11 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitBinary(BinaryTree node, Void p) {
-        // +1 for each "&&" or "||"
         if (node.getKind() == Tree.Kind.AND || node.getKind() == Tree.Kind.OR) {
             incrementComplexity();
         }
         return super.visitBinary(node, p);
     }
-    // --- END NEW ---
 
 
     @Override
@@ -216,12 +224,16 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
     public Void visitMethodInvocation(MethodInvocationTree node, Void p) {
         String methodSelect = node.getMethodSelect().toString();
 
+
+        if (currentMethodName != null && (methodSelect.equals("System.nanoTime") || methodSelect.equals("System.currentTimeMillis"))) {
+            this.methodTimingCallCount++;
+        }
+
         config.forbiddenMethods.stream()
             .filter(rule -> methodSelect.endsWith(rule.pattern))
             .findFirst()
             .ifPresent(rule -> addViolation(rule.message + " (" + methodSelect + ")", rule.severity, node));
 
-        // Check for obfuscation methods
         config.obfuscationMethods.stream()
             .filter(rule -> methodSelect.endsWith(rule.pattern))
             .findFirst()
@@ -240,15 +252,12 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitVariable(VariableTree node, Void p) {
-        // Check if the variable is being initialized
         if (node.getInitializer() != null) {
             ExpressionTree initializer = node.getInitializer();
 
-            // Case 1: Taint Source (e.g., String s = socket.getInputStream().read())
             if (initializer instanceof MethodInvocationTree) {
                 taintAnalyzer.trackSource(node, (MethodInvocationTree) initializer);
             }
-            // Case 2: Taint Propagation (e.g., String cmd = s)
             else {
                 taintAnalyzer.propagateTaint(node, initializer);
             }
