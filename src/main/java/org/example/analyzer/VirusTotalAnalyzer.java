@@ -25,8 +25,7 @@ public class VirusTotalAnalyzer {
     private final ObjectMapper mapper;
 
     public VirusTotalAnalyzer() {
-        // NOTE: The API key should ideally be read from an environment variable
-        // for better security practices, e.g., System.getenv("VT_API_KEY");
+
         this.apiKey = "c830faa612499becfca3247c5688cf38f4d4b6b98d518285abfee871a1432e92";
 
         this.client = new OkHttpClient.Builder()
@@ -79,9 +78,7 @@ public class VirusTotalAnalyzer {
         LOGGER.info("Querying VirusTotal for known hash report...");
 
         try (Response response = client.newCall(request).execute()) {
-            // --- MODIFICATION: ADDED LOGGING ---
-            // Read the response body into a string variable *first* so it can be logged.
-            // The response body can only be read once.
+
             String responseBody = response.body().string();
 
             if (response.code() == 404) {
@@ -90,15 +87,12 @@ public class VirusTotalAnalyzer {
             }
 
             if (!response.isSuccessful()) {
-                // Log the full error response from the API.
                 LOGGER.error("VirusTotal Hash Report (Error Response): {}", responseBody);
                 throw new IOException("Failed to retrieve VirusTotal hash report: " + response.code());
             }
 
-            // Log the full successful response for debugging and transparency.
             LOGGER.info("VirusTotal Hash Report (Success Response): {}", responseBody);
             JsonNode root = mapper.readTree(responseBody);
-            // --- END OF MODIFICATION ---
 
             JsonNode stats = root.path("data").path("attributes").path("last_analysis_stats");
             int maliciousCount = stats.path("malicious").asInt();
@@ -136,7 +130,6 @@ public class VirusTotalAnalyzer {
         LOGGER.info("Uploading {} to VirusTotal for analysis...", file.getName());
 
         try (Response response = client.newCall(request).execute()) {
-            // --- MODIFICATION: ADDED LOGGING ---
             String responseBody = response.body().string();
 
             if (!response.isSuccessful()) {
@@ -146,7 +139,6 @@ public class VirusTotalAnalyzer {
 
             LOGGER.info("VirusTotal Upload Response (Success): {}", responseBody);
             JsonNode root = mapper.readTree(responseBody);
-            // --- END OF MODIFICATION ---
 
             String analysisId = root.path("data").path("id").asText();
             LOGGER.info("Upload successful. Analysis ID: {}", analysisId);
@@ -166,7 +158,6 @@ public class VirusTotalAnalyzer {
                     .build();
 
             try (Response response = client.newCall(request).execute()) {
-                // --- MODIFICATION: ADDED LOGGING ---
                 String responseBody = response.body().string();
 
                 if (!response.isSuccessful()) {
@@ -181,7 +172,6 @@ public class VirusTotalAnalyzer {
 
                 LOGGER.info("VirusTotal Analysis Poll Response (Success): {}", responseBody);
                 JsonNode root = mapper.readTree(responseBody);
-                // --- END OF MODIFICATION ---
 
                 String status = root.path("data").path("attributes").path("status").asText();
 

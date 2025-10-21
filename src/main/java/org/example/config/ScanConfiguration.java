@@ -1,10 +1,7 @@
 package org.example.config;
 
-import org.example.config.Rule;
-
 import java.util.List;
 
-// Represents the entire config.json structure
 public class ScanConfiguration {
     public List<Rule> forbiddenPackages;
     public List<Rule> forbiddenClasses;

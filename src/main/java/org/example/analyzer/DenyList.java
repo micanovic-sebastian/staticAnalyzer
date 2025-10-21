@@ -13,57 +13,48 @@ public class DenyList {
     );
 
     public static final Set<String> FORBIDDEN_CLASSES = Set.of(
-        // Process Execution & System Manipulation
         "java.lang.Runtime",
         "java.lang.ProcessBuilder",
-        "sun.misc.Unsafe",          // For direct memory manipulation.
+        "sun.misc.Unsafe",
 
-        // Desktop Espionage
-        "java.awt.Robot",           // For screen capture and simulating user input.
+        "java.awt.Robot",
 
-        // Dynamic Code Loading
-        "java.net.URLClassLoader"   // For loading code from remote URLs.
+        "java.net.URLClassLoader"
     );
 
     public static final Set<String> FORBIDDEN_METHODS = Set.of(
         "java.lang.Runtime.exec",
         "java.lang.System.exit",
 
-        // Native Code Loading
         "java.lang.System.load",
         "java.lang.System.loadLibrary"
     );
 
     public static final Set<String> SUSPICIOUS_CLASSES = Set.of(
-        // Cryptomining Indicators
         "java.math.BigInteger",
         "java.security.MessageDigest",
         "java.util.concurrent.ExecutorService",
         "java.util.concurrent.ThreadPoolExecutor",
 
-        // Dangerous Deserialization
-        "java.io.ObjectInputStream", // Can lead to RCE if stream is untrusted.
+        "java.io.ObjectInputStream",
 
-        // General File Access (to be checked by the path analyzer)
         "java.io.File"
     );
 
     public static final Set<String> SUSPICIOUS_FILE_PATHS = Set.of(
-        // Windows file paths
         "c:/windows",
         "c:\\windows",
         "system32",
         "program files",
         "appdata",
-        // Linux file paths
+
         "/etc/",
         "/bin/",
         "/sbin/",
         "/usr/bin/",
         "/usr/sbin/",
         "/var/log/",
-        // User home directory - often a target for ransomware or info stealers
-        "user.home" // We will check for System.getProperty("user.home")
+        "user.home"
     );
 
         /**
@@ -74,8 +65,7 @@ public class DenyList {
         "java.net.Socket.getInputStream",
         "java.nio.channels.SocketChannel.read",
         "java.io.FileInputStream.read"
-        // In a real-world tool, you would add many more sources,
-        // such as methods that read HTTP request parameters.
+
     );
 
     /**
@@ -85,12 +75,12 @@ public class DenyList {
     public static final Set<String> SENSITIVE_SINKS = Set.of(
         "java.lang.Runtime.exec",
         "java.lang.ProcessBuilder.start",
-        "java.io.File.new", // Using tainted data for a file path is dangerous
+        "java.io.File.new",
         "java.nio.file.Paths.get"
     );
 
     public static final Set<String> OBFUSCATION_METHODS = Set.of(
-        "java.util.Base64.getDecoder" // The starting point for Base64 decoding.
+        "java.util.Base64.getDecoder"
     );
 
         /**
@@ -103,9 +93,9 @@ public class DenyList {
      * Integer literals that are suspicious, often used for C2 connections.
      */
     public static final Set<Integer> SUSPICIOUS_PORTS = Set.of(
-        1337, // Common "leet" port
-        4444, // Default Metasploit port
-        6667, // Common IRC port used for botnets
-        31337 // Back Orifice port
+        1337,
+        4444,
+        6667,
+        31337
     );
 }

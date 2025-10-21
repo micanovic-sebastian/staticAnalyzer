@@ -15,7 +15,7 @@ import java.util.Map;
 
 public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
-    // Fields for violation contraints
+    // Felder für Violation-Contraints
     private final List<Violation> violations;
     private final CompilationUnitTree compilationUnit;
     private final SourcePositions sourcePositions;
@@ -23,12 +23,12 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
     private final ScanConfiguration config = ConfigurationLoader.getConfiguration();
     private final TaintAnalyzer taintAnalyzer = new TaintAnalyzer();
 
-    //  Fields for Cyclomatic Complexity ---
+    //  Felder für Komplexität
     private final Map<String, Integer> methodComplexities;
     private String currentClassName;
     private String currentMethodName;
 
-    //Field for method-level timing checks ---
+    // Felder für Methoden
     private int methodTimingCallCount = 0;
 
 
@@ -87,7 +87,7 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
         }
     }
 
-    // Helper to check for patterns in any kind of loop
+    // Sucht nach Schleifen
     private void checkForLoopPatterns(StatementTree loopBody, Tree loopNode) {
         LoopBodyScanner loopScanner = new LoopBodyScanner();
         loopScanner.scan(loopBody, null);
@@ -114,17 +114,15 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
         this.currentMethodName = node.getName().toString();
         this.methodTimingCallCount = 0; // Reset for this method
 
-        // Start with base complexity of 1
+        // Starten mit 1
         if (this.currentClassName != null) {
             String key = this.currentClassName + "." + this.currentMethodName;
             this.methodComplexities.put(key, 1);
         }
 
-        // Scan the method body
         Void result = super.visitMethod(node, p);
 
 
-        // This flags methods that have 2 or more calls to nanoTime/currentTimeMillis
         if (this.methodTimingCallCount >= 2) {
              addViolation("Suspicious anti-sandbox/debugging pattern: Method contains " + this.methodTimingCallCount + " calls to System.nanoTime/currentTimeMillis, suggesting a timing check.", "HIGH", node);
         }

@@ -32,43 +32,41 @@ public class StaticAnalyzer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StaticAnalyzer.class);
 
-    // --- Globals for complexity average ---
+    // Globale Counter für die durchschnittliche Code-Komplexität.
     private static int totalMethodCount = 0;
     private static int totalComplexitySum = 0;
     private static final DecimalFormat df = new DecimalFormat("0.00");
 
     public static void main(String[] args) throws IOException {
         if (args.length == 0) {
-            // MODIFIED: Removed log parameter from usage
-            LOGGER.error("Usage: java StaticAnalyzer <path> [vt-mode]");
+            LOGGER.error("Benutzung: java StaticAnalyzer <Pfad> [vt-mode]");
             return;
         }
 
-        // --- MODIFIED: Removed log-mode parsing ---
+        // Hier die Command line args verarbeiten.
         List<String> argList = new ArrayList<>(Arrays.asList(args));
 
-        // Check for and remove the vt-mode flag
+        // Checken ob der VirusTotal Modus an ist.
         boolean isVtModeEnabled = argList.remove("vt-mode");
 
         if (argList.isEmpty()) {
-            // MODIFIED: Removed log parameter from usage
-            LOGGER.error("No path specified. Usage: java StaticAnalyzer <path> [vt-mode]");
+            LOGGER.error("Kein Pfad angegeben. Benutzung: java StaticAnalyzer <Pfad> [vt-mode]");
             return;
         }
 
-        // Assume the first remaining argument is the path
+        // Das erste Argument was noch da ist sollte der Pfad sein.
         String inputPath = argList.get(0);
-        // --- END MODIFIED ---
 
         File inputFile = new File(inputPath);
         if (!inputFile.exists()) {
-            LOGGER.error("Path does not exist: {}", inputPath);
+            LOGGER.error("Der Pfad existiert nicht: {}", inputPath);
             return;
         }
 
         List<File> filesToAnalyze;
         if (inputFile.isDirectory()) {
-            LOGGER.info("Scanning directory: {}", inputPath);
+            // Wenn es ein Ordner ist alle .java files da drin sammeln.
+            LOGGER.info("Durchsuche Verzeichnis: {}", inputPath);
             try (Stream<Path> walk = Files.walk(inputFile.toPath())) {
                 filesToAnalyze = walk
                         .filter(Files::isRegularFile)
@@ -76,38 +74,36 @@ public class StaticAnalyzer {
                         .map(Path::toFile)
                         .collect(Collectors.toList());
             }
-            LOGGER.info("Found {} java files to analyze.", filesToAnalyze.size());
+            LOGGER.info("Es wurden {} Java-Dateien zur Analyse gefunden.", filesToAnalyze.size());
         } else {
-            // If it's a single file, just analyze that one
+            // Wenns nur eine Datei ist dann nur das analysieren.
             filesToAnalyze = Collections.singletonList(inputFile);
-            LOGGER.info("Found 1 java file to analyze.");
+            LOGGER.info("Es wurde 1 Java-Datei zur Analyse gefunden.");
         }
 
         if (filesToAnalyze.isEmpty()) {
-            LOGGER.info("No .java files found. Exiting.");
+            LOGGER.info("Keine .java-Dateien gefunden. Das Programm wird beendet.");
             return;
         }
 
+        // Wenn vt-mode an ist machen wir erst einen Virus-Scan.
         if (isVtModeEnabled) {
-            LOGGER.info("Starting VirusTotal pre-check (vt-mode enabled)...");
+            LOGGER.info("Starte Vorab-Prüfung mit VirusTotal (vt-mode aktiviert)...");
             VirusTotalAnalyzer vtAnalyzer = new VirusTotalAnalyzer();
 
             if (!vtAnalyzer.isConfigured()) {
-                LOGGER.warn("VT_API_KEY not set. Skipping VirusTotal pre-check despite vt-mode.");
+                LOGGER.warn("Der API-Schlüssel für VirusTotal ist nicht konfiguriert. Die Prüfung wird übersprungen.");
             } else {
                 Path tempZipFile = null;
                 try {
-                    // 1. Create a temporary zip file
+                    // Alle Dateien kommen in ein temp zip file.
                     tempZipFile = Files.createTempFile("analysis_bundle_", ".zip");
-                    LOGGER.info("Creating zip bundle for {} files...", filesToAnalyze.size());
+                    LOGGER.info("Erstelle ein ZIP-Archiv für {} Dateien...", filesToAnalyze.size());
 
-                    // Determine base path for relative file names in zip
                     Path inputBasePath = inputFile.isDirectory() ? inputFile.toPath() : inputFile.getParentFile().toPath();
 
-                    // 2. Add all files to the zip
                     try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(tempZipFile))) {
                         for (File file : filesToAnalyze) {
-                            // Create relative paths for files in zip
                             String relativePath = inputBasePath.relativize(file.toPath()).toString().replace('\\', '/');
                             ZipEntry zipEntry = new ZipEntry(relativePath);
                             zos.putNextEntry(zipEntry);
@@ -118,118 +114,114 @@ public class StaticAnalyzer {
                             zos.closeEntry();
                         }
                     }
-                    LOGGER.info("Zip bundle created: {}", tempZipFile.toAbsolutePath());
+                    LOGGER.info("ZIP-Archiv erstellt: {}", tempZipFile.toAbsolutePath());
 
-                    // 3. Upload and check the single zip file
+                    // Das Zip-File zu VirusTotal hochladen und analysieren lassen
                     String analysisId = vtAnalyzer.uploadFile(tempZipFile.toAbsolutePath().toString());
                     boolean isMalicious = vtAnalyzer.getAnalysisReport(analysisId);
 
                     if (isMalicious) {
-                        LOGGER.error("[ANALYSIS ABORTED] Zip bundle was flagged as malicious by VirusTotal.");
-                        return; // Abort the entire operation
+                        LOGGER.error("[ANALYSE ABGEBROCHEN] Das ZIP-Archiv wurde von VirusTotal als schädlich eingestuft.");
+                        return;
                     }
-                    LOGGER.info("VirusTotal pre-check complete. Bundle appears clean.");
+                    LOGGER.info("VirusTotal-Prüfung abgeschlossen. Das Archiv scheint sauber zu sein.");
 
                 } catch (Exception e) {
-                    LOGGER.error("Error during VirusTotal analysis. Aborting static analysis.", e);
+                    LOGGER.error("Fehler bei der VirusTotal-Analyse. Die statische Analyse wird abgebrochen.", e);
                     return;
                 } finally {
-                    // 4. Clean up the temporary zip file
+                    // die Temp-Zip-Datei danach wieder löschen.
                     if (tempZipFile != null) {
                         try {
                             Files.delete(tempZipFile);
-                            LOGGER.info("Deleted temporary zip bundle.");
+                            LOGGER.info("Temporäres ZIP-Archiv wurde gelöscht.");
                         } catch (IOException e) {
-                            LOGGER.warn("Could not delete temporary zip file: {}", tempZipFile.toAbsolutePath());
+                            LOGGER.warn("Konnte die temporäre ZIP-Datei nicht löschen: {}", tempZipFile.toAbsolutePath());
                         }
                     }
                 }
             }
         } else {
-            LOGGER.info("Skipping VirusTotal pre-check (vt-mode not specified).");
+            LOGGER.info("Überspringe die VirusTotal-Prüfung (vt-mode nicht angegeben).");
         }
-        // --- End of VirusTotal Pre-Check ---
 
-        LOGGER.info("Proceeding with static source code analysis.");
-        // --- Reset counters before scan ---
+        LOGGER.info("Fahre mit der statischen Quellcode-Analyse fort.");
+        // Counter für die Komplexität vor dem Scan auf Null setzen
         totalMethodCount = 0;
         totalComplexitySum = 0;
-        // --- END ---
 
-        // --- MODIFIED: Removed logMode parameter from call ---
         for (File file : filesToAnalyze) {
             analyzeFile(file);
         }
-        // --- END MODIFIED ---
 
 
-        // --- Report final average complexity ---
+        // Am ende die durchschnittliche Komplexität von allen Methoden ausgeben.
         if (totalMethodCount > 0) {
             double averageComplexity = (double) totalComplexitySum / totalMethodCount;
             LOGGER.info("----------------------------------------");
-            LOGGER.info("Full analysis complete.");
-            LOGGER.info("Total Methods Analyzed: {}", totalMethodCount);
-            LOGGER.info("Total Cyclomatic Complexity: {}", totalComplexitySum);
-            LOGGER.info("Average Cyclomatic Complexity: {}", df.format(averageComplexity));
+            LOGGER.info("Vollständige Analyse abgeschlossen.");
+            LOGGER.info("Insgesamt analysierte Methoden: {}", totalMethodCount);
+            LOGGER.info("Zyklomatische Gesamtkomplexität: {}", totalComplexitySum);
+            LOGGER.info("Durchschnittliche zyklomatische Komplexität: {}", df.format(averageComplexity));
         } else {
-            LOGGER.info("Full analysis complete. No methods were found to analyze.");
+            LOGGER.info("Vollständige Analyse abgeschlossen. Es wurden keine Methoden zur Analyse gefunden.");
         }
-        // --- END ---
     }
 
-    // --- MODIFIED: Removed logMode parameter from signature ---
+    // Diese methode analysiert Java-Dateien
     private static void analyzeFile(File sourceFile) {
-        // --- MODIFIED: Always set ThreadContext ---
+        // der Dateiname wird für die Log-Ausgabe vorbereitet.
         String baseName = sourceFile.toPath().getFileName().toString();
         String scanTargetName = baseName.replaceFirst("[.][^.]+$", "");
         ThreadContext.put("scanTarget", scanTargetName);
-        // --- END MODIFIED ---
 
-        LOGGER.info("Analyzing: {}", sourceFile.getAbsolutePath());
+        LOGGER.info("Analysiere: {}", sourceFile.getAbsolutePath());
 
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
             Iterable<? extends JavaFileObject> compilationUnits = fileManager.getJavaFileObjects(sourceFile);
 
-            // Add compiler options to disable annotation processing
+            // Compiler-Parameter damit Annotation Processing aus ist.
             List<String> options = List.of("-proc:none");
             JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, null, options, null, compilationUnits);
 
+            // der Source Code wird zu einem AST geparsed.
             JavacTask javacTask = (JavacTask) task;
             SourcePositions sourcePositions = Trees.instance(javacTask).getSourcePositions();
             Iterable<? extends CompilationUnitTree> asts = javacTask.parse();
 
             for (CompilationUnitTree ast : asts) {
+                // ein Visitor läuft durch den AST und prüft den Code gegen die Regeln.
                 ForbiddenApiVisitor visitor = new ForbiddenApiVisitor(ast, sourcePositions);
                 visitor.scan(ast, null);
 
                 List<Violation> violations = visitor.getViolations();
                 if (violations.isEmpty()) {
-                    LOGGER.info("No violations found in {}.", sourceFile.getName());
+                    LOGGER.info("Keine Regelverstöße in {} gefunden.", sourceFile.getName());
                 } else {
                     for (Violation violation : violations) {
                         LOGGER.warn(violation.toString());
                     }
                 }
 
-                // --- Process and log Cyclomatic Complexity ---
+                // die Komplexität von jeder Methode wird geloggt.
                 Map<String, Integer> complexities = visitor.getMethodComplexities();
                 if (!complexities.isEmpty()) {
-                    LOGGER.info("--- Cyclomatic Complexity ---");
+                    LOGGER.info("--- Zyklomatische Komplexität ---");
                     for (Map.Entry<String, Integer> entry : complexities.entrySet()) {
-                        LOGGER.info("  - Method: {} | Complexity: {}", entry.getKey(), entry.getValue());
+                        LOGGER.info("  - Methode: {} | Komplexität: {}", entry.getKey(), entry.getValue());
                         totalComplexitySum += entry.getValue();
                         totalMethodCount++;
                     }
                     LOGGER.info("-------------------------------");
                 }
-                // --- END ---
             }
         } catch (Exception e) {
-            LOGGER.error("Could not analyze file: {}", sourceFile.getAbsolutePath(), e);
+            LOGGER.error("Datei konnte nicht analysiert werden: {}", sourceFile.getAbsolutePath(), e);
         } finally {
-            // This will safely clear the context
+            // wichtig damit die Logs für die nächste Datei wieder leer sind.
             ThreadContext.clearAll();
         }
     }
 }
+
