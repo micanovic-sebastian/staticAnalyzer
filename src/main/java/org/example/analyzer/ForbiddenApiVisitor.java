@@ -4,11 +4,15 @@ import com.sun.source.tree.*;
 import com.sun.source.util.SourcePositions;
 import com.sun.source.util.TreeScanner;
 import org.example.config.ConfigurationLoader;
+import org.example.config.Rule; // Import Rule
 import org.example.config.ScanConfiguration;
 import org.example.config.Violation;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.function.BiPredicate; // Import BiPredicate
 
 public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
@@ -22,10 +26,8 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
     // Fields for methods
     private int methodTimingCallCount = 0;
 
-    // --- NEW: Fields for Entropy Calculation ---
+    // --- Fields for Entropy Calculation ---
     private final List<Double> identifierEntropies = new ArrayList<>();
-    // Don't calculate entropy for very short names (like 'i', 'e', 'x')
-    // as they are common in normal code and can skew the average.
     private static final int MIN_ENTROPY_LENGTH = 3;
 
     public ForbiddenApiVisitor(CompilationUnitTree compilationUnit, SourcePositions sourcePositions) {
@@ -56,6 +58,25 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
         violations.add(new Violation(message, lineNumber, severity));
     }
 
+    // --- NEW HELPER METHOD for checking rules ---
+    /**
+     * Checks a given name against a list of rules using a specified matching strategy.
+     * Adds a violation if a match is found.
+     *
+     * @param nameToCheck The string name to check (e.g., import name, method name).
+     * @param rules       The list of rules to check against.
+     * @param matchStrategy A BiPredicate defining how to compare the nameToCheck with a rule's pattern.
+     * @param node        The AST node associated with the check, for line number reporting.
+     */
+    private void checkRules(String nameToCheck, List<Rule> rules, BiPredicate<String, String> matchStrategy, Tree node) {
+        if (rules == null) return; // Handle cases where a rule list might be missing in config
+        rules.stream()
+             .filter(rule -> matchStrategy.test(nameToCheck, rule.pattern))
+             .findFirst()
+             .ifPresent(rule -> addViolation(rule.message + " (" + nameToCheck + ")", rule.severity, node));
+    }
+
+
     private static class LoopBodyScanner extends TreeScanner<Void, Void> {
         boolean foundMessageDigest = false;
         boolean foundBigInteger = false;
@@ -72,13 +93,9 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
         @Override
         public Void visitNewClass(NewClassTree node, Void p) {
-            // Check for BigInteger instantiation inside loop (for crypto-mining)
             if (node.getIdentifier().toString().equals("BigInteger")) {
                 foundBigInteger = true;
             }
-
-
-
             return super.visitNewClass(node, p);
         }
 
@@ -88,7 +105,6 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
             if (methodSelect.equals("System.nanoTime") || methodSelect.equals("System.currentTimeMillis")) {
                 foundTimingCall = true;
             }
-            // Check for MessageDigest usage inside loop (for crypto-mining)
             if (methodSelect.contains("MessageDigest.getInstance")) {
                 foundMessageDigest = true;
             }
@@ -96,7 +112,6 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
         }
     }
 
-    // Searches for loop patterns
     private void checkForLoopPatterns(StatementTree loopBody, Tree loopNode) {
         LoopBodyScanner loopScanner = new LoopBodyScanner();
         loopScanner.scan(loopBody, null);
@@ -114,37 +129,47 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitClass(ClassTree node, Void p) {
-        // --- NEW: Check entropy of Class/Interface name ---
         checkAndStoreEntropy(node.getSimpleName().toString());
         return super.visitClass(node, p);
     }
 
     @Override
     public Void visitMethod(MethodTree node, Void p) {
-        // --- NEW: Check entropy of Method name ---
-        // Don't check constructors, their name is always the class name
         if (!node.getName().toString().equals("<init>")) {
             checkAndStoreEntropy(node.getName().toString());
         }
 
-        this.methodTimingCallCount = 0; // Reset for this method
+        this.methodTimingCallCount = 0;
         Void result = super.visitMethod(node, p);
 
         if (this.methodTimingCallCount >= 2) {
-             addViolation("Suspicious anti-sandbox/debugging pattern: Method contains " + this.methodTimingCallCount + " calls to System.nanoTime/currentTimeMillis, suggesting a timing check.", "HIGH", node);
+            addViolation("Suspicious anti-sandbox/debugging pattern: Method contains " + this.methodTimingCallCount + " calls to System.nanoTime/currentTimeMillis, suggesting a timing check.", "HIGH", node);
         }
 
-        this.methodTimingCallCount = 0; // Clear count
+        this.methodTimingCallCount = 0;
         return result;
     }
 
     @Override
     public Void visitIf(IfTree node, Void p) {
+        if (node.getCondition() instanceof LiteralTree) {
+            LiteralTree condition = (LiteralTree) node.getCondition();
+            if (Boolean.FALSE.equals(condition.getValue())) {
+                 addViolation("Suspicious dead code block (if(false)). May be used for anti-analysis.", "LOW", node);
+            }
+        }
         return super.visitIf(node, p);
     }
+
     @Override
     public Void visitWhileLoop(WhileLoopTree node, Void p) {
         checkForLoopPatterns(node.getStatement(), node);
+         if (node.getCondition() instanceof LiteralTree) {
+            LiteralTree condition = (LiteralTree) node.getCondition();
+            if (Boolean.FALSE.equals(condition.getValue())) {
+                 addViolation("Suspicious dead code block (while(false)). May be used for anti-analysis.", "LOW", node);
+            }
+        }
         return super.visitWhileLoop(node, p);
     }
 
@@ -157,6 +182,12 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
     @Override
     public Void visitDoWhileLoop(DoWhileLoopTree node, Void p) {
         checkForLoopPatterns(node.getStatement(), node);
+        if (node.getCondition() instanceof LiteralTree) {
+            LiteralTree condition = (LiteralTree) node.getCondition();
+            if (Boolean.FALSE.equals(condition.getValue())) {
+                 addViolation("Suspicious dead code block (do{...}while(false)). May be used for anti-analysis.", "LOW", node);
+            }
+        }
         return super.visitDoWhileLoop(node, p);
     }
 
@@ -188,20 +219,15 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
     public Void visitImport(ImportTree node, Void p) {
         String importName = node.getQualifiedIdentifier().toString();
 
-        config.forbiddenPackages.stream()
-            .filter(rule -> importName.startsWith(rule.pattern))
-            .findFirst()
-            .ifPresent(rule -> addViolation(rule.message + " (" + importName + ")", rule.severity, node));
+        // --- REFACTORED: Use checkRules helper method ---
+        // Check forbidden packages (match start)
+        checkRules(importName, config.forbiddenPackages, String::startsWith, node);
 
-        config.forbiddenClasses.stream()
-            .filter(rule -> importName.equals(rule.pattern))
-            .findFirst()
-            .ifPresent(rule -> addViolation(rule.message + " (" + importName + ")", rule.severity, node));
+        // Check forbidden classes (match exactly)
+        checkRules(importName, config.forbiddenClasses, String::equals, node);
 
-        config.suspiciousClasses.stream()
-            .filter(rule -> importName.equals(rule.pattern))
-            .findFirst()
-            .ifPresent(rule -> addViolation(rule.message + " (" + importName + ")", rule.severity, node));
+        // Check suspicious classes (match exactly)
+        checkRules(importName, config.suspiciousClasses, String::equals, node);
 
         return super.visitImport(node, p);
     }
@@ -220,12 +246,9 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
         else if (className.equals("String")) {
             if (node.getArguments().size() == 1) {
                 ExpressionTree arg = node.getArguments().get(0);
-
-                // Case 1: new String(variableName)
                 if (arg.getKind() == Tree.Kind.IDENTIFIER) {
                     addViolation("string creation from a variable. May be hiding obfuscated data.", "LOW", node);
                 }
-                // Case 2: new String(new byte[] { ... }) or new String(new char[] { ... })
                 else if (arg.getKind() == Tree.Kind.NEW_ARRAY) {
                     NewArrayTree newArray = (NewArrayTree) arg;
                     String arrayType = newArray.getType().toString();
@@ -249,23 +272,33 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
             this.methodTimingCallCount++;
         }
 
-        // --- NEW: Check for dynamic Class.forName ---
+        if (methodSelect.equals("System.getProperty") || methodSelect.equals("System.getenv")) {
+            if (!node.getArguments().isEmpty() && node.getArguments().get(0) instanceof LiteralTree) {
+                LiteralTree arg = (LiteralTree) node.getArguments().get(0);
+                if (arg.getValue() instanceof String) {
+                    String propertyName = (String) arg.getValue();
+                    if (DenyList.FINGERPRINTING_PROPERTIES.contains(propertyName)) {
+                        addViolation("Suspicious system property access for fingerprinting: " + propertyName, "MEDIUM", node);
+                    }
+                }
+            } else {
+                 addViolation("Potentially suspicious dynamic access to system property/environment variable.", "LOW", node);
+            }
+        }
+
+
         if (methodSelect.equals("Class.forName") && !node.getArguments().isEmpty()) {
             if (node.getArguments().get(0).getKind() != Tree.Kind.STRING_LITERAL) {
                 addViolation("Suspicious dynamic class loading: Class.forName() is called with a variable, not a string literal.", "HIGH", node);
             }
         }
 
-        config.forbiddenMethods.stream()
-            .filter(rule -> methodSelect.endsWith(rule.pattern))
-            .findFirst()
-            .ifPresent(rule -> addViolation(rule.message + " (" + methodSelect + ")", rule.severity, node));
+        // --- REFACTORED: Use checkRules helper method ---
+        // Check forbidden methods (match end)
+        checkRules(methodSelect, config.forbiddenMethods, String::endsWith, node);
 
-        config.obfuscationMethods.stream()
-            .filter(rule -> methodSelect.endsWith(rule.pattern))
-            .findFirst()
-            .ifPresent(rule -> addViolation(rule.message + " (" + methodSelect + ")", rule.severity, node));
-
+        // Check obfuscation methods (match end)
+        checkRules(methodSelect, config.obfuscationMethods, String::endsWith, node);
 
 
         if (methodSelect.startsWith("Files.write") || methodSelect.startsWith("Files.read")) {
@@ -277,7 +310,6 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitVariable(VariableTree node, Void p) {
-        // --- NEW: Check entropy of Variable name ---
         checkAndStoreEntropy(node.getName().toString());
 
         if (node.getInitializer() != null) {
@@ -288,27 +320,28 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
     @Override
     public Void visitLiteral(LiteralTree node, Void p) {
-        // We only care about String literals
         if (node.getValue() instanceof String) {
             String value = (String) node.getValue();
-
-            // --- NEW: Check entropy of String literal ---
             checkAndStoreEntropy(value);
 
-            // 1. Check for IP Addresses
+            String lowerValue = value.toLowerCase();
+            for (String suspicious : DenyList.SUSPICIOUS_FINGERPRINTING_STRINGS) {
+                 if (lowerValue.contains(suspicious.toLowerCase())) {
+                     addViolation("Suspicious string literal found (potential fingerprinting/evasion artifact): " + value, "LOW", node);
+                     break;
+                 }
+            }
+
             if (DenyList.IP_ADDRESS_PATTERN.matcher(value).find()) {
                 addViolation("IP address found: " + value, "MEDIUM", node);
             }
 
-            // 2. Check for Domains (with basic heuristics to reduce false positives)
             if (value.contains(".") && DenyList.DOMAIN_PATTERN.matcher(value).find()) {
-                // Exclude common Java package prefixes and file paths
                 if (!value.startsWith("java.") && !value.startsWith("org.") &&
-                    !value.startsWith("com.") && !value.startsWith("javax.") &&
-                    !value.startsWith("sun.") && !value.contains("/") &&
-                    !value.contains("\\") && !value.endsWith(".java") &&
-                    !value.endsWith(".xml") && !value.endsWith(".json"))
-                {
+                        !value.startsWith("com.") && !value.startsWith("javax.") &&
+                        !value.startsWith("sun.") && !value.contains("/") &&
+                        !value.contains("\\") && !value.endsWith(".java") &&
+                        !value.endsWith(".xml") && !value.endsWith(".json")) {
                     addViolation("Hardcoded domain/string found: " + value, "MEDIUM", node);
                 }
             }

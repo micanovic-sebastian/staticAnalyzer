@@ -222,4 +222,39 @@ public class TestClass {
         Method m = String.class.getMethod("toUpperCase");
         System.out.println(m.invoke("test"));
     }
+
+    public void triggerFingerprintingEvasion() {
+         System.out.println("Testing fingerprinting & evasion...");
+
+         // [VIOLATION] Accessing suspicious property "user.name"
+         String username = System.getProperty("user.name");
+
+         // [VIOLATION] Literal "sandbox" used in comparison (indirectly checked via visitLiteral)
+         if (username != null && username.toLowerCase().equals("sandbox")) {
+             System.out.println("Sandbox username detected!");
+             // System.exit(0); // Evasion action
+         }
+
+         // [VIOLATION] Accessing suspicious property "os.name"
+         String os = System.getProperty("os.name");
+         System.out.println("OS: " + os);
+
+         // [VIOLATION] Literal "VMWare" used (indirectly checked via visitLiteral)
+         File vmwareTools = new File("C:\\Program Files\\VMware\\VMware Tools");
+         if (vmwareTools.exists()) {
+             System.out.println("VMWare detected!");
+         }
+
+         // [VIOLATION] Literal "procmon.exe" used (indirectly checked via visitLiteral)
+         String toolCheck = "tasklist | findstr procmon.exe";
+         try {
+             Runtime.getRuntime().exec(toolCheck); // exec is already flagged
+         } catch(IOException e) {}
+
+         // [VIOLATION] Dead code block if(false)
+         if (false) {
+             System.out.println("This should not print.");
+         }
+
+    }
 }
