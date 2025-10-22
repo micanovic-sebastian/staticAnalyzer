@@ -17,10 +17,12 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -29,6 +31,10 @@ import java.util.zip.ZipOutputStream;
 public class StaticAnalyzer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StaticAnalyzer.class);
+
+
+    private static final double ENTROPY_OBUFSCATION_THRESHOLD = 4;
+    private static final DecimalFormat df = new DecimalFormat("0.00");
 
     public static void main(String[] args) throws IOException {
         if (args.length == 0) {
@@ -180,6 +186,23 @@ public class StaticAnalyzer {
                 } else {
                     for (Violation violation : violations) {
                         LOGGER.warn(violation.toString());
+                    }
+                }
+
+                List<Double> entropies = visitor.getIdentifierEntropies();
+                if (!entropies.isEmpty()) {
+                    double sum = 0.0;
+                    for (double entropy : entropies) {
+                        sum += entropy;
+                    }
+                    double averageEntropy = sum / entropies.size();
+
+                    LOGGER.info("Average identifier entropy for {}: {} (based on {} identifiers)",
+                                 sourceFile.getName(), df.format(averageEntropy), entropies.size());
+
+                    if (averageEntropy > ENTROPY_OBUFSCATION_THRESHOLD) {
+                        LOGGER.warn("[HIGH] High average identifier entropy detected ({}). File may be obfuscated.",
+                                    df.format(averageEntropy));
                     }
                 }
             }
