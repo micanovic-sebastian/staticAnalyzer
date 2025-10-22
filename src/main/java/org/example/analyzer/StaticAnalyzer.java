@@ -22,7 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+// Removed unused Map import
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -146,21 +146,45 @@ public class StaticAnalyzer {
 
         LOGGER.info("Continuing with static source code analysis.");
 
+        // --- MODIFIED: List to aggregate all entropies across files ---
+        List<Double> totalEntropies = new ArrayList<>();
+
         for (File file : filesToAnalyze) {
-            analyzeFile(file);
+            // --- MODIFIED: Add entropies from each file analysis to the total list ---
+            totalEntropies.addAll(analyzeFile(file));
         }
 
         LOGGER.info("Full analysis completed.");
+
+        // --- MODIFIED: Calculate and log total average entropy after all files are processed ---
+        if (!totalEntropies.isEmpty()) {
+            double sum = 0.0;
+            for (double entropy : totalEntropies) {
+                sum += entropy;
+            }
+            double averageEntropy = sum / totalEntropies.size();
+
+            LOGGER.info("Total Average Identifier Entropy for Scan: {} (based on {} identifiers across {} files)",
+                         df.format(averageEntropy), totalEntropies.size(), filesToAnalyze.size());
+
+            if (averageEntropy > ENTROPY_OBUFSCATION_THRESHOLD) {
+                LOGGER.warn("[HIGH] High average identifier entropy detected ({}). Project may be obfuscated.",
+                            df.format(averageEntropy));
+            }
+        }
     }
 
-    // This method analyzes Java files
-    private static void analyzeFile(File sourceFile) {
+    // --- MODIFIED: Method now returns the list of entropies found in the file ---
+    private static List<Double> analyzeFile(File sourceFile) {
         // The file name is prepared for log output.
         String baseName = sourceFile.toPath().getFileName().toString();
         String scanTargetName = baseName.replaceFirst("[.][^.]+$", "");
         ThreadContext.put("scanTarget", scanTargetName);
 
         LOGGER.info("Analyzing: {}", sourceFile.getAbsolutePath());
+
+        // --- MODIFIED: List to collect entropies for *this* file ---
+        List<Double> fileEntropies = new ArrayList<>();
 
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
@@ -189,22 +213,8 @@ public class StaticAnalyzer {
                     }
                 }
 
-                List<Double> entropies = visitor.getIdentifierEntropies();
-                if (!entropies.isEmpty()) {
-                    double sum = 0.0;
-                    for (double entropy : entropies) {
-                        sum += entropy;
-                    }
-                    double averageEntropy = sum / entropies.size();
+                fileEntropies.addAll(visitor.getIdentifierEntropies());
 
-                    LOGGER.info("Average identifier entropy for {}: {} (based on {} identifiers)",
-                                 sourceFile.getName(), df.format(averageEntropy), entropies.size());
-
-                    if (averageEntropy > ENTROPY_OBUFSCATION_THRESHOLD) {
-                        LOGGER.warn("[HIGH] High average identifier entropy detected ({}). File may be obfuscated.",
-                                    df.format(averageEntropy));
-                    }
-                }
             }
         } catch (Exception e) {
             LOGGER.error("File could not be analyzed: {}", sourceFile.getAbsolutePath(), e);
@@ -212,5 +222,6 @@ public class StaticAnalyzer {
             // Important so that the logs are clear for the next file.
             ThreadContext.clearAll();
         }
+        return fileEntropies;
     }
 }
