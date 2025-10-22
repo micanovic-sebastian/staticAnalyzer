@@ -8,5 +8,5 @@ public class ScanConfiguration {
     public List<Rule> forbiddenMethods;
     public List<Rule> suspiciousClasses;
     public List<Rule> suspiciousFilePaths;
-    public List<Rule> obfuscationMethods; // <-- ADD THIS LINE
+    public List<Rule> obfuscationMethods;
 }

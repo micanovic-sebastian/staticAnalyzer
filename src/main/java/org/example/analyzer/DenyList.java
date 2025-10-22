@@ -90,6 +90,13 @@ public class DenyList {
         Pattern.compile("\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b");
 
     /**
+     * Regex patterns for detecting suspicious domains.
+     * This is a simple regex and might have false positives.
+     */
+    public static final Pattern DOMAIN_PATTERN =
+        Pattern.compile("\\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,6}\\b");
+
+    /**
      * Integer literals that are suspicious, often used for C2 connections.
      */
     public static final Set<Integer> SUSPICIOUS_PORTS = Set.of(

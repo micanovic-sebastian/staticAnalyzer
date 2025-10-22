@@ -13,6 +13,6 @@ public class Violation {
 
     @Override
     public String toString() {
-        return String.format("[%s] [VIOLATION] Line %d: %s", severity.toUpperCase(), lineNumber, message);
+        return String.format("[%s] Line %d: %s", severity.toUpperCase(), lineNumber, message);
     }
 }

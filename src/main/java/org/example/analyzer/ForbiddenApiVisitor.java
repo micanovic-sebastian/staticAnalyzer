@@ -76,10 +76,10 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
             addViolation("Potential cryptomining pattern detected.", "HIGH", loopNode);
         }
         if (loopScanner.foundXorOperation) {
-            addViolation("Potential string obfuscation: Loop contains XOR operations, often used for simple decryption.", "HIGH", loopNode);
+            addViolation("Loop contains XOR operations, often used for simple decryption.", "LOW", loopNode);
         }
         if (loopScanner.foundTimingCall) {
-            addViolation("Suspicious anti-sandbox/debugging pattern: Timing call (System.nanoTime/currentTimeMillis) found inside a loop.", "HIGH", loopNode);
+            addViolation("Timing call (System.nanoTime/currentTimeMillis) found inside a loop.", "MEDIUM", loopNode);
         }
     }
 
@@ -210,5 +210,32 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
 
         }
         return super.visitVariable(node, p);
+    }
+
+    @Override
+    public Void visitLiteral(LiteralTree node, Void p) {
+        // We only care about String literals
+        if (node.getValue() instanceof String) {
+            String value = (String) node.getValue();
+
+            // 1. Check for IP Addresses
+            if (DenyList.IP_ADDRESS_PATTERN.matcher(value).find()) {
+                addViolation("IP address found: " + value, "MEDIUM", node);
+            }
+
+            // 2. Check for Domains (with basic heuristics to reduce false positives)
+            if (value.contains(".") && DenyList.DOMAIN_PATTERN.matcher(value).find()) {
+                // Exclude common Java package prefixes and file paths
+                if (!value.startsWith("java.") && !value.startsWith("org.") &&
+                    !value.startsWith("com.") && !value.startsWith("javax.") &&
+                    !value.startsWith("sun.") && !value.contains("/") &&
+                    !value.contains("\\") && !value.endsWith(".java") &&
+                    !value.endsWith(".xml") && !value.endsWith(".json"))
+                {
+                    addViolation("Hardcoded domain/string found: " + value, "MEDIUM", node);
+                }
+            }
+        }
+        return super.visitLiteral(node, p);
     }
 }
