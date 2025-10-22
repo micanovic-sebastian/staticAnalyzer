@@ -1,0 +1,12 @@
+{
+  "blockedPackages": [
+    "java.net.lang",
+    "java.io"
+  ],
+  "blockedClasses": [
+    "java.lang.System.ProcessBuilder"
+  ],
+  "blockedMethods": [
+    "java.net.PrintStream.println"
+  ]
+}

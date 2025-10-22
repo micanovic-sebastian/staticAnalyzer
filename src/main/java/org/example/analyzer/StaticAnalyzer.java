@@ -17,12 +17,10 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -31,11 +29,6 @@ import java.util.zip.ZipOutputStream;
 public class StaticAnalyzer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StaticAnalyzer.class);
-
-    // Globale Counter für die durchschnittliche Code-Komplexität.
-    private static int totalMethodCount = 0;
-    private static int totalComplexitySum = 0;
-    private static final DecimalFormat df = new DecimalFormat("0.00");
 
     public static void main(String[] args) throws IOException {
         if (args.length == 0) {
@@ -142,30 +135,16 @@ public class StaticAnalyzer {
                 }
             }
         } else {
-            LOGGER.info("Überspringe die VirusTotal-Prüfung (vt-mode nicht angegeben).");
+            LOGGER.info("");
         }
 
         LOGGER.info("Fahre mit der statischen Quellcode-Analyse fort.");
-        // Counter für die Komplexität vor dem Scan auf Null setzen
-        totalMethodCount = 0;
-        totalComplexitySum = 0;
 
         for (File file : filesToAnalyze) {
             analyzeFile(file);
         }
 
-
-        // Am ende die durchschnittliche Komplexität von allen Methoden ausgeben.
-        if (totalMethodCount > 0) {
-            double averageComplexity = (double) totalComplexitySum / totalMethodCount;
-            LOGGER.info("----------------------------------------");
-            LOGGER.info("Vollständige Analyse abgeschlossen.");
-            LOGGER.info("Insgesamt analysierte Methoden: {}", totalMethodCount);
-            LOGGER.info("Zyklomatische Gesamtkomplexität: {}", totalComplexitySum);
-            LOGGER.info("Durchschnittliche zyklomatische Komplexität: {}", df.format(averageComplexity));
-        } else {
-            LOGGER.info("Vollständige Analyse abgeschlossen. Es wurden keine Methoden zur Analyse gefunden.");
-        }
+        LOGGER.info("Vollständige Analyse abgeschlossen.");
     }
 
     // Diese methode analysiert Java-Dateien
@@ -175,7 +154,7 @@ public class StaticAnalyzer {
         String scanTargetName = baseName.replaceFirst("[.][^.]+$", "");
         ThreadContext.put("scanTarget", scanTargetName);
 
-        LOGGER.info("Analysiere: {}", sourceFile.getAbsolutePath());
+        LOGGER.info("Target: {}", sourceFile.getAbsolutePath());
 
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
@@ -203,18 +182,6 @@ public class StaticAnalyzer {
                         LOGGER.warn(violation.toString());
                     }
                 }
-
-                // die Komplexität von jeder Methode wird geloggt.
-                Map<String, Integer> complexities = visitor.getMethodComplexities();
-                if (!complexities.isEmpty()) {
-                    LOGGER.info("--- Zyklomatische Komplexität ---");
-                    for (Map.Entry<String, Integer> entry : complexities.entrySet()) {
-                        LOGGER.info("  - Methode: {} | Komplexität: {}", entry.getKey(), entry.getValue());
-                        totalComplexitySum += entry.getValue();
-                        totalMethodCount++;
-                    }
-                    LOGGER.info("-------------------------------");
-                }
             }
         } catch (Exception e) {
             LOGGER.error("Datei konnte nicht analysiert werden: {}", sourceFile.getAbsolutePath(), e);
@@ -224,4 +191,3 @@ public class StaticAnalyzer {
         }
     }
 }
-
