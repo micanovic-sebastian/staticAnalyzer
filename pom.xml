@@ -45,51 +45,8 @@
             <artifactId>okhttp</artifactId>
             <version>4.12.0</version>
         </dependency>
-
-        <dependency>
-            <groupId>org.soot-oss</groupId>
-            <artifactId>sootup.callgraph</artifactId>
-            <version>1.3.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.soot-oss</groupId>
-            <artifactId>sootup.core</artifactId>
-            <version>1.3.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.soot-oss</groupId>
-            <artifactId>sootup.java.bytecode</artifactId>
-            <version>1.3.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.soot-oss</groupId>
-            <artifactId>sootup.java.core</artifactId>
-            <version>1.3.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.soot-oss</groupId>
-            <artifactId>sootup.java.sourcecode</artifactId>
-            <version>1.3.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.soot-oss</groupId>
-            <artifactId>sootup.jimple.parser</artifactId>
-            <version>1.3.0</version>
-        </dependency>
     </dependencies>
 
-
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.soot-oss</groupId>
-                <artifactId>sootup.java.sourcecode</artifactId>
-                <version>1.3.0</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
 
     <build>
@@ -106,7 +63,7 @@
                             <goal>single</goal>
                         </goals>
                         <configuration>
-                            <finalName>stat</finalName>
+                            <finalName>staticAnalyzer</finalName>
                             <appendAssemblyId>false</appendAssemblyId>
                             <archive>
                                 <manifest>

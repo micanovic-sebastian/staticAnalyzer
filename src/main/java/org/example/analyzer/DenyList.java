@@ -6,20 +6,20 @@ import java.util.regex.Pattern;
 public class DenyList {
 
     /**
-     * Regex patterns for detecting suspicious string literals.
+     * Regex-Pattern zum Erkennen von verdächtigen String-Literalen
      */
     public static final Pattern IP_ADDRESS_PATTERN =
             Pattern.compile("\\b(?:[0-9]{1,3}\\.){3}[0-9]{1,3}\\b");
 
     /**
-     * Regex patterns for detecting suspicious domains.
-     * This is a simple regex and might have false positives.
+     * Regex-Pattern zum Erkennen von verdächtigen Domains
+     * Das ist ein simples Regex und könnte falsche Treffer haben
      */
     public static final Pattern DOMAIN_PATTERN =
             Pattern.compile("\\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,6}\\b");
 
     /**
-     * Properties often checked for fingerprinting.
+     * Properties die oft für Fingerprinting geprüft werden
      */
     public static final Set<String> FINGERPRINTING_PROPERTIES = Set.of(
             "user.name",
@@ -30,17 +30,17 @@ public class DenyList {
     );
 
     /**
-     * String literals associated with sandboxes, VMs, or analysis tools.
+     * String-Literale die mit Sandboxes VMs oder Analyse-Tools zu tun haben
      */
     public static final Set<String> SUSPICIOUS_FINGERPRINTING_STRINGS = Set.of(
-            // Usernames
+            // Benutzernamen
             "admin", "test", "sandbox", "user", "vagrant",
-            // VM / Sandbox Artifacts
+            // VM / Sandbox-Artefakte
             "vmware", "virtualbox", "vbox", "qemu", "hyperv", "parallels",
             "C:\\sandbox", "C:\\analysis",
-            // Security Tools Processes
+            // Prozesse von Security-Tools
             "vmtoolsd.exe", "wireshark.exe", "procmon.exe", "fiddler.exe", "ollydbg.exe",
-            // MAC Prefixes (less common check in Java source, but possible)
+            // MAC-Präfixe (seltener Check im Java-Source aber möglich)
             "08:00:27", // VirtualBox
             "00:05:69", // VMware
             "00:0C:29", // VMware
@@ -48,3 +48,4 @@ public class DenyList {
             "00:50:56"  // VMware
     );
 }
+

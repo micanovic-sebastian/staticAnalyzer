@@ -19,7 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -27,35 +26,42 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+/**
+ * Dies ist die Hauptklasse für die statische Code-Analyse
+ * Sie parst Java-Dateien zu einem AST und lässt den ForbiddenApiVisitor darüber laufen
+ * Sie sammelt auch Metriken wie die Entropie
+ * Zusätzlich integriert sie eine VirusTotal-Prüfung
+ */
 public class StaticAnalyzer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StaticAnalyzer.class);
 
-    private static final double ENTROPY_OBUFSCATION_THRESHOLD = 4;
+    // Ab diesem Entropie-Wert gilt ein Projekt als potenziell verschleiert
+    private static final double ENTROPY_OBUFSCATION_THRESHOLD = 5;
     private static final DecimalFormat df = new DecimalFormat("0.00");
 
-    // --- NEW: Enum for VirusTotal Modes ---
+    // Definiert die verschiedenen Modi für die VirusTotal-Prüfung
     private enum VtMode {
-        OFF,        // No VT scan
-        HASH_ONLY,  // Only check individual file hashes
-        ZIP_ONLY,   // Only upload ZIP archive
-        DEFAULT     // Check hashes first, then upload ZIP if unknown/clean
+        OFF,        // Kein VT-Scan
+        HASH_ONLY,  // Nur die Hashes einzelner Dateien prüfen
+        ZIP_ONLY,   // Nur das ZIP-Archiv hochladen
+        DEFAULT     // Zuerst Hashes prüfen dann ZIP hochladen falls unbekannt
     }
 
     public static void main(String[] args) throws IOException {
-        if (args.length == 0) {
-            LOGGER.error("Usage: java StaticAnalyzer <Path> [vt-mode=off|hash|zip]");
-            return;
-        }
 
-        // --- MODIFIED: Argument Parsing ---
+        // Argumente parsen
         String inputPath = null;
-        VtMode vtMode = VtMode.DEFAULT; // Default VT behavior
+        VtMode vtMode = VtMode.DEFAULT; // Standard-Verhalten für VT
+        String logFileSetting = null; // null = Standard-Route (DefaultFile)
+        String vtModeStr = null;
+        boolean unrecognizedArg = false;
+        String usage = "Usage: java StaticAnalyzer <Path> [vt-mode=off|hash|zip] [log=path/to/file.log|none]";
 
         for (String arg : args) {
             if (arg.startsWith("vt-mode=")) {
-                String modeStr = arg.substring("vt-mode=".length()).toLowerCase();
-                switch (modeStr) {
+                vtModeStr = arg.substring("vt-mode=".length()).toLowerCase();
+                switch (vtModeStr) {
                     case "off":
                         vtMode = VtMode.OFF;
                         break;
@@ -66,22 +72,49 @@ public class StaticAnalyzer {
                         vtMode = VtMode.ZIP_ONLY;
                         break;
                     default:
-                        LOGGER.error("Invalid vt-mode specified: {}. Valid options are off, hash, zip.", modeStr);
-                        return;
+                        // Fehler-Logging wird zurückgestellt bis der ThreadContext gesetzt ist
+                        break;
                 }
+            } else if (arg.startsWith("log=")) {
+                logFileSetting = arg.substring("log=".length());
             } else if (inputPath == null) {
+                // Das erste Argument ohne Präfix ist der Pfad
                 inputPath = arg;
             } else {
-                LOGGER.error("Too many arguments. Usage: java StaticAnalyzer <Path> [vt-mode=off|hash|zip]");
-                return;
+                // Zu viele Argumente
+                unrecognizedArg = true;
             }
         }
 
-        if (inputPath == null) {
-            LOGGER.error("No path specified. Usage: java StaticAnalyzer <Path> [vt-mode=off|hash|zip]");
+        // ThreadContext für das Logging setzen
+        // Dies muss vor der ersten Log-Nachricht passieren
+        if (logFileSetting != null) {
+            ThreadContext.put("logFile", logFileSetting);
+        }
+        // Wenn logFileSetting null ist, bleibt der ThreadContext leer
+        // log4j2.xml leitet dann zur "DefaultFile"-Route
+
+        // Jetzt kann man Fehler loggen
+        if (args.length == 0) {
+            LOGGER.error(usage);
             return;
         }
-        // --- End of Argument Parsing ---
+
+        if (inputPath == null) {
+            LOGGER.error("No path specified. " + usage);
+            return;
+        }
+
+        if (unrecognizedArg) {
+             LOGGER.error("Too many arguments. " + usage);
+             return;
+        }
+
+        if (vtModeStr != null && !List.of("off", "hash", "zip").contains(vtModeStr)) {
+             LOGGER.error("Invalid vt-mode specified: {}. Valid options are off, hash, zip.", vtModeStr);
+             return;
+        }
+        // Ende des Argument-Parsings
 
 
         File inputFile = new File(inputPath);
@@ -92,6 +125,7 @@ public class StaticAnalyzer {
 
         List<File> filesToAnalyze;
         if (inputFile.isDirectory()) {
+            // Wenn es ein Verzeichnis ist alle .java-Dateien darin sammeln
             LOGGER.info("Scanning directory: {}", inputPath);
             try (Stream<Path> walk = Files.walk(inputFile.toPath())) {
                 filesToAnalyze = walk
@@ -102,6 +136,7 @@ public class StaticAnalyzer {
             }
             LOGGER.info("{} Java files found for analysis.", filesToAnalyze.size());
         } else {
+            // Ansonsten nur die einzelne Datei analysieren
             filesToAnalyze = Collections.singletonList(inputFile);
             LOGGER.info("1 Java file found for analysis.");
         }
@@ -111,25 +146,27 @@ public class StaticAnalyzer {
             return;
         }
 
-        // --- MODIFIED: Run VirusTotal Scan based on mode ---
+        // Führt den VirusTotal-Scan basierend auf dem Modus aus
         boolean proceedWithAnalysis = runVirusTotalScan(filesToAnalyze, inputFile, vtMode);
 
         if (!proceedWithAnalysis) {
             LOGGER.error("VirusTotal scan indicated potential malware or an error occurred. Aborting static analysis.");
             return;
         }
-        // --- End of VT Scan Logic ---
+        // Ende der VT-Scan-Logik
 
 
         LOGGER.info("Continuing with static source code analysis.");
         List<Double> totalEntropies = new ArrayList<>();
 
+        // Jede gefundene Datei einzeln analysieren
         for (File file : filesToAnalyze) {
             totalEntropies.addAll(analyzeFile(file));
         }
 
         LOGGER.info("Full analysis completed.");
 
+        // Am Ende eine Gesamt-Entropie-Statistik ausgeben
         if (!totalEntropies.isEmpty()) {
             double sum = 0.0;
             for (double entropy : totalEntropies) {
@@ -137,25 +174,23 @@ public class StaticAnalyzer {
             }
             double averageEntropy = sum / totalEntropies.size();
 
-            LOGGER.info("--------------------------------------------------");
             LOGGER.info("Total Average Identifier Entropy for Scan: {} (based on {} identifiers across {} files)",
                          df.format(averageEntropy), totalEntropies.size(), filesToAnalyze.size());
 
+            // Warnen wenn der Durchschnittswert den Schwellenwert überschreitet
             if (averageEntropy > ENTROPY_OBUFSCATION_THRESHOLD) {
                 LOGGER.warn("[HIGH] High average identifier entropy detected ({}). Project may be obfuscated.",
                             df.format(averageEntropy));
             }
-             LOGGER.info("--------------------------------------------------");
         }
     }
 
-    // --- NEW: Method to handle VirusTotal Scanning ---
     /**
-     * Runs VirusTotal scans based on the specified mode.
-     * @param filesToAnalyze List of files to check.
-     * @param inputFile Original input file/directory (used for path relativization).
-     * @param mode The VtMode to use (OFF, HASH_ONLY, ZIP_ONLY, DEFAULT).
-     * @return true if the analysis should proceed (no malware detected), false otherwise.
+     * Führt die VirusTotal-Scans basierend auf dem Modus aus
+     * @param filesToAnalyze Liste der zu prüfenden Dateien
+     * @param inputFile Das ursprüngliche Eingabe-Verzeichnis (für relative Pfade)
+     * @param mode Der zu verwendende VtMode (OFF HASH_ONLY ZIP_ONLY DEFAULT)
+     * @return true wenn die Analyse fortgesetzt werden soll (keine Malware gefunden)
      */
     private static boolean runVirusTotalScan(List<File> filesToAnalyze, File inputFile, VtMode mode) {
         if (mode == VtMode.OFF) {
@@ -168,56 +203,59 @@ public class StaticAnalyzer {
 
         if (!vtAnalyzer.isConfigured()) {
             LOGGER.warn("The API key for VirusTotal is not configured. Skipping VT check.");
-            return true; // Proceed if VT is not configured
+            return true; // Fortfahren wenn VT nicht konfiguriert ist
         }
 
         boolean runHashCheck = (mode == VtMode.HASH_ONLY || mode == VtMode.DEFAULT);
         boolean runZipUpload = (mode == VtMode.ZIP_ONLY || mode == VtMode.DEFAULT);
-        boolean hashCheckPassed = true; // Assume pass initially
+        boolean hashCheckPassed = true; // Zunächst annehmen dass der Check besteht
 
-        // 1. Perform Hash Check (if applicable)
+        // 1. Hash-Prüfung durchführen (wenn zutreffend)
         if (runHashCheck) {
             LOGGER.info("Performing individual file hash checks...");
             boolean anyMalicious = false;
             for (File file : filesToAnalyze) {
                 try {
+                    // Prüft ob der Hash der Datei bei VT als bösartig bekannt ist
                     if (vtAnalyzer.checkFileHash(file.getAbsolutePath())) {
                         LOGGER.error("[ANALYSIS CANCELED] File {} known to VirusTotal as malicious based on hash.", file.getName());
                         anyMalicious = true;
-                        hashCheckPassed = false; // Mark hash check as failed
-                        break; // Stop checking other files
+                        hashCheckPassed = false; // Markiert die Hash-Prüfung als fehlgeschlagen
+                        break; // Prüfung weiterer Dateien stoppen
                     }
                 } catch (IOException e) {
                     LOGGER.error("Error during VirusTotal hash check for {}. Proceeding cautiously.", file.getName(), e);
-                    // Decide if you want to abort on error or continue. Let's continue but skip zip upload if default.
-                    hashCheckPassed = false; // Mark hash check as failed due to error
+                    // Bei einem Fehler fahren wir fort aber markieren den Check als fehlgeschlagen
+                    hashCheckPassed = false;
                 }
             }
             if (anyMalicious) {
-                return false; // Stop analysis if any file is known malicious
+                return false; // Analyse stoppen wenn eine Datei bösartig ist
             }
             if (hashCheckPassed) {
                  LOGGER.info("Individual file hash checks completed. No known malicious files found.");
             } else {
                  LOGGER.warn("Individual file hash checks encountered errors or inconclusive results.");
             }
-            // If mode is HASH_ONLY, we are done with VT checks.
+            // Wenn der Modus HASH_ONLY ist sind wir hier fertig mit VT
             if (mode == VtMode.HASH_ONLY) {
-                return true; // Proceed with static analysis as no known malicious hashes were found
+                return true; // Mit statischer Analyse fortfahren
             }
         }
 
-        // 2. Perform Zip Upload (if applicable and hash check didn't fail in DEFAULT mode)
-        // Skip zip upload in DEFAULT mode if hash check encountered errors/inconclusive results
+        // 2. ZIP-Upload durchführen (falls zutreffend)
+        // Im DEFAULT-Modus nur ausführen wenn die Hash-Prüfung erfolgreich war
         if (runZipUpload && (mode == VtMode.ZIP_ONLY || (mode == VtMode.DEFAULT && hashCheckPassed))) {
             LOGGER.info("Performing ZIP archive upload and analysis...");
             Path tempZipFile = null;
             try {
                 tempZipFile = Files.createTempFile("analysis_bundle_", ".zip");
-                LOGGER.debug("Creating temporary ZIP archive: {}", tempZipFile.toAbsolutePath()); // Use debug for temp file path
+                LOGGER.debug("Creating temporary ZIP archive: {}", tempZipFile.toAbsolutePath()); // Temp-Pfad nur im Debug loggen
 
+                // Basis-Pfad für relative Pfade im ZIP bestimmen
                 Path inputBasePath = inputFile.isDirectory() ? inputFile.toPath() : inputFile.getParentFile().toPath();
 
+                // Ein temporäres ZIP-Archiv mit allen Dateien erstellen
                 try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(tempZipFile))) {
                     for (File file : filesToAnalyze) {
                         String relativePath = inputBasePath.relativize(file.toPath()).toString().replace('\\', '/');
@@ -231,6 +269,7 @@ public class StaticAnalyzer {
                 }
                 LOGGER.info("ZIP archive created for {} files.", filesToAnalyze.size());
 
+                // Das ZIP bei VT hochladen und analysieren lassen
                 String analysisId = vtAnalyzer.uploadFile(tempZipFile.toAbsolutePath().toString());
                 boolean isMalicious = vtAnalyzer.getAnalysisReport(analysisId);
 
@@ -239,12 +278,13 @@ public class StaticAnalyzer {
                     return false;
                 }
                 LOGGER.info("VirusTotal ZIP scan completed. The archive appears to be clean.");
-                return true; // Proceed with analysis
+                return true; // Fortfahren mit Analyse
 
             } catch (Exception e) {
                 LOGGER.error("Error during VirusTotal ZIP upload/analysis. Aborting analysis.", e);
-                return false; // Stop analysis on error
+                return false; // Analyse bei Fehler stoppen
             } finally {
+                // Das temporäre ZIP-Archiv aufräumen
                 if (tempZipFile != null) {
                     try {
                         Files.delete(tempZipFile);
@@ -255,20 +295,30 @@ public class StaticAnalyzer {
                 }
             }
         } else if (mode == VtMode.DEFAULT && !hashCheckPassed) {
+             // Im DEFAULT-Modus den ZIP-Upload überspringen wenn Hashes fehlschlugen
              LOGGER.warn("Skipping ZIP upload due to issues during hash check phase.");
-             return true; // Proceed with static analysis despite hash check issues
+             return true; // Trotzdem mit statischer Analyse fortfahren
         }
 
 
-        // Should only reach here if mode was HASH_ONLY (already returned) or DEFAULT where hash passed
-        // but zip upload wasn't applicable (e.g. error during hash check prevented it).
+        // Sollte nur erreicht werden wenn HASH_ONLY (bereits returned) oder DEFAULT
+        // bei dem der Hash-Check bestanden wurde aber der ZIP-Upload nicht zutraf
         return true;
     }
 
 
+    /**
+     * Analysiert eine einzelne Java-Datei
+     * Parst die Datei zu einem AST und startet den ForbiddenApiVisitor
+     * @param sourceFile Die zu analysierende Quellcode-Datei
+     * @return Eine Liste der gefundenen Entropie-Werte
+     */
     private static List<Double> analyzeFile(File sourceFile) {
         String baseName = sourceFile.toPath().getFileName().toString();
         String scanTargetName = baseName.replaceFirst("[.][^.]+$", "");
+
+        // Setzt den "scanTarget" für das file-spezifische Logging
+        // Wird vom RoutingAppender in log4j2.xml verwendet
         ThreadContext.put("scanTarget", scanTargetName);
 
         LOGGER.info("Analyzing: {}", sourceFile.getAbsolutePath());
@@ -277,17 +327,21 @@ public class StaticAnalyzer {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
             Iterable<? extends JavaFileObject> compilationUnits = fileManager.getJavaFileObjects(sourceFile);
+            // "-proc:none" deaktiviert die Annotation-Verarbeitung
             List<String> options = List.of("-proc:none");
             JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, null, options, null, compilationUnits);
 
+            // Den AST (Abstract Syntax Tree) parsen
             JavacTask javacTask = (JavacTask) task;
             SourcePositions sourcePositions = Trees.instance(javacTask).getSourcePositions();
             Iterable<? extends CompilationUnitTree> asts = javacTask.parse();
 
             for (CompilationUnitTree ast : asts) {
+                // Den Visitor für diesen AST erstellen und starten
                 ForbiddenApiVisitor visitor = new ForbiddenApiVisitor(ast, sourcePositions);
-                visitor.scan(ast, null);
+                visitor.scan(ast, null); // Startet den Scan
 
+                // Violations sammeln und loggen
                 List<Violation> violations = visitor.getViolations();
                 if (violations.isEmpty()) {
                     LOGGER.info("No rule violations found in {}.", sourceFile.getName());
@@ -297,12 +351,15 @@ public class StaticAnalyzer {
                     }
                 }
 
+                // Entropie-Werte sammeln
                 fileEntropies.addAll(visitor.getIdentifierEntropies());
             }
         } catch (Exception e) {
             LOGGER.error("File could not be analyzed: {}", sourceFile.getAbsolutePath(), e);
         } finally {
-            ThreadContext.clearAll();
+            // Wichtig: Nur den "scanTarget" entfernen
+            // "logFile" muss für den globalen Logger erhalten bleiben
+            ThreadContext.remove("scanTarget");
         }
         return fileEntropies;
     }

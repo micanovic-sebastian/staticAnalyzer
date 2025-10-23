@@ -7,17 +7,20 @@
 
         <Null name="DoNothing"/>
 
-        <Routing name="FileRouter">
-            <Routes pattern="$${ctx:scanTarget}">
-                <!-- Route 1: Default. If scanTarget is null or empty, do nothing. -->
-                <Route ref="DoNothing" key="$${ctx:scanTarget}"/>
+        <File name="DefaultFile" fileName="static-analyzer.log">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </File>
 
-                <!-- Route 2: Catch-all. This route is chosen for any non-empty scanTarget value. -->
-                <!-- The route itself doesn't have a key. It's the default for when the pattern resolves to something. -->
+        <Routing name="GlobalFileRouter">
+            <Routes pattern="$${ctx:logFile}">
+                <Route ref="DoNothing" key="none"/>
+
+                <Route ref="DefaultFile" key="$${ctx:logFile}"/>
+
                 <Route>
-                    <File name="File-${ctx:scanTarget}" fileName="c:/users/basti/documents/logs/${ctx:scanTarget}-${date:yyyy-MM-dd}.log">
+                    <File name="CustomFile-${ctx:logFile}" fileName="${ctx:logFile}">
                         <PatternLayout>
-                            <Pattern>%d %p %c{1.} [%t] %m%n</Pattern>
+                            <Pattern>%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Pattern>
                         </PatternLayout>
                     </File>
                 </Route>
@@ -28,7 +31,7 @@
     <Loggers>
         <Root level="info">
             <AppenderRef ref="Console"/>
-            <AppenderRef ref="FileRouter"/>
+            <AppenderRef ref="GlobalFileRouter"/>
         </Root>
     </Loggers>
 </Configuration>
