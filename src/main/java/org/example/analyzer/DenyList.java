@@ -13,7 +13,7 @@ public class DenyList {
 
     /**
      * Regex-Pattern zum Erkennen von verdächtigen Domains
-     * Das ist ein simples Regex und könnte falsche Treffer haben
+     * Das ist ein einfaches Regex und könnte falsche Treffer haben
      */
     public static final Pattern DOMAIN_PATTERN =
             Pattern.compile("\\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,6}\\b");

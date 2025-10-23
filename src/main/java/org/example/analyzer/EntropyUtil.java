@@ -4,7 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * eine Hilfsklasse zur Berechnung der Shannon-Entropie eines Strings
+ * Eine Hilfsklasse zur Berechnung der Shannon-Entropie eines Strings
  * Entropie ist ein Maß für Zufälligkeit oder Unvorhersehbarkeit
  * Strings mit hoher Entropie sind typisch für verschleierte oder verschlüsselte Daten
  * - "password" -> Niedrige Entropie (1.98)
@@ -22,13 +22,13 @@ public class EntropyUtil {
             return 0.0;
         }
 
-        // 1 zähle die Zeichenhäufigkeit
+        // Zeichenhäufigkeit
         Map<Character, Integer> charCounts = new HashMap<>();
         for (char c : s.toCharArray()) {
             charCounts.put(c, charCounts.getOrDefault(c, 0) + 1);
         }
 
-        // 2 berechne die Entropie
+        // Entropie
         double entropy = 0.0;
         int length = s.length();
         for (int count : charCounts.values()) {

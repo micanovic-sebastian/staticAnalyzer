@@ -176,7 +176,7 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
         Void result = super.visitMethod(node, p); // Steigt in den Methodenrumpf ab
 
         // Prüft ob die Methode verdächtig viele Timing-Aufrufe hat
-        // Dies deutet auf Anti-Debugging hin
+        // Deutet auf Anti-Debugging hin
         if (this.methodTimingCallCount >= 2) {
             addViolation("Suspicious anti-sandbox/debugging pattern: Method contains " + this.methodTimingCallCount + " calls to System.nanoTime/currentTimeMillis, suggesting a timing check.", "HIGH", node);
         }
@@ -265,7 +265,6 @@ public class ForbiddenApiVisitor extends TreeScanner<Void, Void> {
     public Void visitBinary(BinaryTree node, Void p) {
         return super.visitBinary(node, p);
     }
-
 
     /**
      * Besucht einen Import-Befehl

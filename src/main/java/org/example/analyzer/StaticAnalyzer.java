@@ -27,10 +27,9 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Dies ist die Hauptklasse für die statische Code-Analyse
- * Sie parst Java-Dateien zu einem AST und lässt den ForbiddenApiVisitor darüber laufen
- * Sie sammelt auch Metriken wie die Entropie
- * Zusätzlich integriert sie eine VirusTotal-Prüfung
+ * Die Hauptklasse für die statische Code-Analyse
+ * Parst Java-Dateien zu einem AST und lässt den ForbiddenApiVisitor darüber laufen
+ * Zusätzlich integriert wird die VirusTotal-Prüfung
  */
 public class StaticAnalyzer {
 
@@ -87,7 +86,7 @@ public class StaticAnalyzer {
         }
 
         // ThreadContext für das Logging setzen
-        // Dies muss vor der ersten Log-Nachricht passieren
+        // Das muss vor der ersten Log-Nachricht passieren
         if (logFileSetting != null) {
             ThreadContext.put("logFile", logFileSetting);
         }

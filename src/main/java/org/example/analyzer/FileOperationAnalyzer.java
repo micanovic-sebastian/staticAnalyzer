@@ -25,27 +25,27 @@ public class FileOperationAnalyzer {
     }
 
     private Optional<Rule> findMatchingRule(String path) {
-        // normalisiere den Pfad für einen einfachen Abgleich
+        // Normalisiere den Pfad für einen einfachen Abgleich
         String normalizedPath = path.toLowerCase().replace('\\', '/');
         return config.suspiciousFilePaths.stream()
                 .filter(rule -> normalizedPath.contains(rule.pattern))
                 .findFirst();
     }
 
-    // versucht das erste String-Argument aus einem Knoten zu extrahieren
+    // Es wird das erste String-Argument aus einem Knoten extrahieren
     private Optional<String> extractStringArgument(Tree node) {
         List<? extends ExpressionTree> arguments = null;
 
         if (node instanceof NewClassTree) {
-            // behandelt Konstruktor-Aufrufe zb new File("...")
+            // Behandelt Konstruktor-Aufrufe zb new File("...")
             arguments = ((NewClassTree) node).getArguments();
         } else if (node instanceof MethodInvocationTree) {
-            // behandelt Methoden-Aufrufe zb Paths.get("...")
+            // Behandelt Methoden-Aufrufe zb Paths.get("...")
             arguments = ((MethodInvocationTree) node).getArguments();
         }
 
         if (arguments != null && !arguments.isEmpty()) {
-            // wir prüfen nur das erste Argument
+            // Wir prüfen nur das erste Argument
             ExpressionTree argument = arguments.get(0);
             if (argument instanceof LiteralTree) {
                 Object value = ((LiteralTree) argument).getValue();
